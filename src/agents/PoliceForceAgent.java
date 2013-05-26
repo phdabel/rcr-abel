@@ -37,7 +37,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 	private static final int channel = Channel.BROADCAST.ordinal();
     private static final String DISTANCE_KEY = "clear.repair.distance";
 
-    private ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> kruskalMap;
+    
     private int distance;
 
     @Override
@@ -51,7 +51,6 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         model.indexClass(StandardEntityURN.ROAD);
         distance = config.getIntValue(DISTANCE_KEY);
         this.setCommunicationChannel(channel);
-        this.kruskalMap = this.minimalSpanningTree(this.map);
         
     }
     
@@ -65,26 +64,50 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         for (Command next : heard) {
             Logger.debug("Heard " + next);
         }
-        // Am I near a blockade?
+        
+        //verifica bloqueio mais proximo para limpar a area
+        List<EntityID> closestPath = new ArrayList<EntityID>();
+    	for(EntityID refuge : refugeIDs)
+    	{
+    		List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+    		if(closestPath.isEmpty())
+    		{
+    			closestPath = path;
+    		}else{
+    			if(path.size() < closestPath.size())
+    			{
+    				closestPath = path;
+    			}
+    		}
+    	}
+    	sendMove(time, closestPath);
+    	// Am I near a blockade?
         Blockade target = getTargetBlockade();
         if (target != null) {
             Logger.info("Clearing blockade " + target);
             sendClear(time, target.getID());
             return;
         }
+        
+        
         // Plan a path to a blocked area
-        if(getBlockedRoads().isEmpty() != true)
-        	this.getDijkstraPath(getBlockedRoads().get(0));
-        List<EntityID> path = search.breadthFirstSearch(me().getPosition(), getBlockedRoads());
-        if (path != null) {
-            Logger.info("Moving to target");
-            Road r = (Road)model.getEntity(path.get(path.size() - 1));
-            Blockade b = getTargetBlockade(r, -1);
-            sendMove(time, path, b.getX(), b.getY());
-            Logger.debug("Path: " + path);
-            Logger.debug("Target coordinates: " + b.getX() + ", " + b.getY());
-            return;
+        
+        //List<EntityID> path = search.breadthFirstSearch(me().getPosition(), getBlockedRoads());
+        if(getBlockedRoads().isEmpty() == false)
+        {
+        	List<EntityID> path = getDijkstraPath(me().getPosition(), getBlockedRoads().get(0));
+        
+        	if (path != null) {
+            	Logger.info("Moving to target");
+            	Road r = (Road)model.getEntity(path.get(path.size() - 1));
+            	Blockade b = getTargetBlockade(r, -1);
+            	sendMove(time, path, b.getX(), b.getY());
+            	Logger.debug("Path: " + path);
+            	Logger.debug("Target coordinates: " + b.getX() + ", " + b.getY());
+            	return;
+        	}
         }
+        
         Logger.debug("Couldn't plan a path to a blocked road");
         Logger.info("Moving randomly");
         sendMove(time, randomWalk());
@@ -95,16 +118,6 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         return EnumSet.of(StandardEntityURN.POLICE_FORCE);
     }
     
-    public void getDijkstraPath(EntityID destiny)
-    {
-    	DijkstraShortestPath path = new DijkstraShortestPath(this.kruskalMap, me().getPosition(), destiny);
-    	System.out.println("Caminho de "+me().getPosition()+" ate "+destiny+" - "+path.getPath().getEdgeList());
-    	for(DefaultWeightedEdge e : (List<DefaultWeightedEdge>)path.getPathEdgeList())
-    	{
-    		System.out.println(e.getSource());
-    	}
-    	
-    }
 
     private List<EntityID> getBlockedRoads() {
         Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.ROAD);
@@ -160,27 +173,6 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         return null;
     }
     
-    protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> minimalSpanningTree(Graph<EntityID, DefaultWeightedEdge> graph)
-    {
-    	ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> h = new ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge>(DefaultWeightedEdge.class);
-		
-    	KruskalMinimumSpanningTree kruskalMST = new KruskalMinimumSpanningTree(graph);
-		Iterator itr = kruskalMST.getEdgeSet().iterator();
-		while(itr.hasNext())
-		{
-			DefaultWeightedEdge edge = (DefaultWeightedEdge) itr.next();
-			if(h.containsVertex(graph.getEdgeSource(edge)) == false)
-			{
-				h.addVertex(graph.getEdgeSource(edge));
-			}
-			if(h.containsVertex(graph.getEdgeTarget(edge)) == false)
-			{
-				h.addVertex(graph.getEdgeTarget(edge));
-			}
-			h.addEdge(graph.getEdgeSource(edge), graph.getEdgeTarget(edge));
-		}
-		return h;
-    }
 
     private int findDistanceTo(Blockade b, int x, int y) {
         //        Logger.debug("Finding distance to " + b + " from " + x + ", " + y);

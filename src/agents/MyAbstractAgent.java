@@ -7,10 +7,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
 
+import org.jgrapht.Graph;
+import org.jgrapht.alg.DijkstraShortestPath;
+import org.jgrapht.alg.KruskalMinimumSpanningTree;
 import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.ListenableUndirectedWeightedGraph;
 
@@ -86,6 +90,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     private ArrayList<MyMessage> receivedMessages = new ArrayList<MyMessage>();
     private ArrayList<RetainedInformation> retained = new ArrayList<RetainedInformation>();
     protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> map;
+    private ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> kruskalMap;
     /*
      * Constructor of MyAbstractAgent
      */
@@ -115,7 +120,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
             }
         }
         this.map = this.worldGraph();
-        
+        this.kruskalMap = this.minimalSpanningTree(this.map);
         
         /**
          * sets communication via radio
@@ -315,6 +320,53 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
                 }
             }
         }
+    }
+    
+  //retorna o caminho mais curto (algoritmo de Dijkstra) do local atual do agente ate um destino
+    public List<EntityID> getDijkstraPath(EntityID position, EntityID destiny)
+    {
+    	List<EntityID> returnedPath = new ArrayList<EntityID>();
+    	DijkstraShortestPath<EntityID, DefaultWeightedEdge> shortestPath = 
+    			new DijkstraShortestPath<EntityID, DefaultWeightedEdge>(this.kruskalMap, position, destiny);
+    	returnedPath.add(shortestPath.getPath().getStartVertex());
+    	for(DefaultWeightedEdge e : shortestPath.getPathEdgeList())
+    	{
+    		EntityID sourceV = this.kruskalMap.getEdgeSource(e);
+    		EntityID targetV = this.kruskalMap.getEdgeTarget(e);
+    		if(returnedPath.contains(sourceV) == false && shortestPath.getPath().getEndVertex() != sourceV)
+    		{
+    			returnedPath.add(sourceV);
+    		}
+    		if(returnedPath.contains(targetV) == false && shortestPath.getPath().getEndVertex() != targetV)
+    		{
+    			returnedPath.add(targetV);
+    		}
+    	}
+    	returnedPath.add(shortestPath.getPath().getEndVertex());
+    	return returnedPath;
+    }
+    
+    //monta a minimal spanning tree do mapa
+    protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> minimalSpanningTree(Graph<EntityID, DefaultWeightedEdge> graph)
+    {
+    	ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> h = new ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge>(DefaultWeightedEdge.class);
+		
+    	KruskalMinimumSpanningTree kruskalMST = new KruskalMinimumSpanningTree(graph);
+		Iterator itr = kruskalMST.getEdgeSet().iterator();
+		while(itr.hasNext())
+		{
+			DefaultWeightedEdge edge = (DefaultWeightedEdge) itr.next();
+			if(h.containsVertex(graph.getEdgeSource(edge)) == false)
+			{
+				h.addVertex(graph.getEdgeSource(edge));
+			}
+			if(h.containsVertex(graph.getEdgeTarget(edge)) == false)
+			{
+				h.addVertex(graph.getEdgeTarget(edge));
+			}
+			h.addEdge(graph.getEdgeSource(edge), graph.getEdgeTarget(edge));
+		}
+		return h;
     }
 
 	public ArrayList<MyMessage> getReceivedMessage() {
