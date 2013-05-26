@@ -118,17 +118,18 @@ public class LaunchMyAgents {
         catch (ComponentConnectionException e) {
             Logger.info("failed: " + e.getMessage());
         }
+            
+        try {
+            while (at-- != 0) {
+                Logger.info("Connecting ambulance team " + (i++) + "...");
+                launcher.connect(new AmbulanceTeamAgent());
+                Logger.info("success");
+            }
+        }
+        catch (ComponentConnectionException e) {
+            Logger.info("failed: " + e.getMessage());
+        }
             /*
-            try {
-                while (at-- != 0) {
-                    Logger.info("Connecting ambulance team " + (i++) + "...");
-                    launcher.connect(new SampleAmbulanceTeam());
-                    Logger.info("success");
-                }
-            }
-            catch (ComponentConnectionException e) {
-                Logger.info("failed: " + e.getMessage());
-            }
             try {
                 while (true) {
                     Logger.info("Connecting centre " + (i++) + "...");

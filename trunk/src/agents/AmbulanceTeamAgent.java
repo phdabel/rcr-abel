@@ -8,6 +8,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 
 import message.Channel;
+import message.TokenInformation;
 
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.ChangeSet;
@@ -114,25 +115,28 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	        }
 	        // Nothing to do
 	        List<EntityID> closestPathToLookUp = new ArrayList<EntityID>();
-        	for(EntityID building : unexploredBuildings)
-        	{
-        		List<EntityID> path = this.getDijkstraPath(me().getPosition(), building);
-        		if(closestPathToLookUp.isEmpty())
-        		{
-        			closestPathToLookUp = path;
-        		}else{
-        			if(path.size() < closestPathToLookUp.size())
+	        if(unexploredBuildings.isEmpty() == false)
+	        {
+	        	for(EntityID building : unexploredBuildings)
+	        	{	
+        			List<EntityID> path = this.getDijkstraPath(me().getPosition(), building);
+        			if(closestPathToLookUp.isEmpty())
         			{
         				closestPathToLookUp = path;
+        			}else{
+        				if(path.size() < closestPathToLookUp.size())
+        				{
+        					closestPathToLookUp = path;
+        				}
         			}
         		}
-        	}
         	
-        	if (closestPathToLookUp != null) {
-                Logger.info("Searching buildings");
-                sendMove(time, closestPathToLookUp);
-                return;
-            }
+        		if (closestPathToLookUp != null) {
+                	Logger.info("Searching buildings");
+                	sendMove(time, closestPathToLookUp);
+                	return;
+            	}
+	        }
 	        
 	        Logger.info("Moving randomly");
 	        sendMove(time, randomWalk());
@@ -166,10 +170,21 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	                && h.isPositionDefined()
 	                && h.getHP() > 0
 	                && (h.getBuriedness() > 0 || h.getDamage() > 0)) {
+	            	
 	                targets.add(h);
 	            }
 	        }
 	        Collections.sort(targets, new DistanceSorter(location(), model));
+	        ArrayList<TokenInformation> rescueJob = new ArrayList<TokenInformation>();
+	        /*for(Human next: targets)
+	        {
+	        	if(se tiver bloqueio proximo cria token para bloqueio e token para civil)
+	        	{
+	        		
+	        	}elseif(){
+	        		
+	        	}
+	        }*/
 	        return targets;
 	    }
 

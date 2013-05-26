@@ -56,6 +56,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         maxDistance = config.getIntValue(MAX_DISTANCE_KEY);
         maxPower = config.getIntValue(MAX_POWER_KEY);
         this.setCommunicationChannel(channel);
+        
         Logger.info("Fire Brigade LADCOP está conectado: distância máxima de extinção de chamas = " + maxDistance + ", força máxima = " + maxPower + ", máxima capacidade do tanque = " + maxWater);
     }
     
