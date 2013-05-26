@@ -95,17 +95,31 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         // Are we out of water?
         if (me().isWaterDefined() && me().getWater() == 0) {
             // Head for a refuge
-            List<EntityID> path = search.breadthFirstSearch(me().getPosition(), refugeIDs);
-            if (path != null) {
+        	List<EntityID> closestPath = new ArrayList<EntityID>();
+        	for(EntityID refuge : refugeIDs)
+        	{
+        		List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+        		if(closestPath.isEmpty())
+        		{
+        			closestPath = path;
+        		}else{
+        			if(path.size() < closestPath.size())
+        			{
+        				closestPath = path;
+        			}
+        		}
+        	}
+            //List<EntityID> path = search.breadthFirstSearch(me().getPosition(), refugeIDs);
+            if (closestPath != null) {
                 Logger.info("Moving to refuge");
-                sendMove(time, path);
+                sendMove(time, closestPath);
                 return;
             }
             else {
                 Logger.debug("Couldn't plan a path to a refuge.");
-                path = randomWalk();
+                closestPath = randomWalk();
                 Logger.info("Moving randomly");
-                sendMove(time, path);
+                sendMove(time, closestPath);
                 return;
             }
         }

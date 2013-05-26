@@ -50,7 +50,7 @@ public class LaunchMyAgents {
 			String host = config.getValue(Constants.KERNEL_HOST_NAME_KEY, Constants.DEFAULT_KERNEL_HOST_NAME);
 			int fb = 10;
 			int pf = 10;
-			int at = -1;
+			int at = 10;
 			// CHECKSTYLE:OFF:ModifiedControlVariable
 			for (int i = 0; i < args.length; ++i) {
 				if (args[i].equals(FIRE_BRIGADE_FLAG)) {
