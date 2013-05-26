@@ -35,6 +35,7 @@ import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.kernel.comms.ChannelCommunicationModel;
 import rescuecore2.standard.kernel.comms.StandardCommunicationModel;
 import rescuecore2.standard.messages.AKSpeak;
+import rescuecore2.standard.entities.Area;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Refuge;
@@ -103,10 +104,11 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     protected void postConnect() {
         super.postConnect();
         //creates arrays list for buildings, roads and refuges of the world model
-        buildingIDs = new ArrayList<EntityID>();
-        roadIDs = new ArrayList<EntityID>();
-        refugeIDs = new ArrayList<EntityID>();
         
+        buildingIDs = new ArrayList<EntityID>();
+        //roadIDs = new ArrayList<EntityID>();
+        refugeIDs = new ArrayList<EntityID>();
+        /*
         //assign values to buildings, roads and refuges according to model
         for (StandardEntity next : model) {
             if (next instanceof Building) {
@@ -118,7 +120,8 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
             if (next instanceof Refuge) {
                 refugeIDs.add(next.getID());
             }
-        }
+        }*/
+        
         this.map = this.worldGraph();
         this.kruskalMap = this.minimalSpanningTree(this.map);
         
@@ -199,13 +202,13 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		{
     			Road b = (Road)next;
     			Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
-    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() > 1)){
+    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() >= 1)){
     				g.addVertex(b.getID());
     				List<EntityID> neighbours = b.getNeighbours();
     				for(EntityID n : neighbours)
     				{
     					if(g.containsVertex(n)){
-    						Road tmp = (Road)model.getEntity(n);
+    						Area tmp = (Area)model.getEntity(n);
     						Double sizeTmp = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(tmp.getApexList()));
     						g.addEdge(n, b.getID());
     						g.setEdgeWeight(g.getEdge(n, b.getID()), (sizeTmp * size));
@@ -213,6 +216,46 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     				}
     			}
     		}
+    		if(next instanceof Building)
+    		{
+    			Building b = (Building)next;
+    			buildingIDs.add(b.getID());
+    			Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
+    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() >= 1)){
+    				g.addVertex(b.getID());
+    				List<EntityID> neighbours = b.getNeighbours();
+    				for(EntityID n : neighbours)
+    				{
+    					if(g.containsVertex(n)){
+    						Area tmp = (Area)model.getEntity(n);
+    						Double sizeTmp = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(tmp.getApexList()));
+    						g.addEdge(n, b.getID());
+    						g.setEdgeWeight(g.getEdge(n, b.getID()), (sizeTmp * size));
+    					}
+    				}
+    			}
+    		}
+    		if(next instanceof Refuge)
+    		{
+    			Refuge b = (Refuge)next;
+    			refugeIDs.add(b.getID());
+    			Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
+    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() >= 1)){
+    				g.addVertex(b.getID());
+    				List<EntityID> neighbours = b.getNeighbours();
+    				for(EntityID n : neighbours)
+    				{
+    					if(g.containsVertex(n)){
+    						Area tmp = (Area)model.getEntity(n);
+    						Double sizeTmp = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(tmp.getApexList()));
+    						g.addEdge(n, b.getID());
+    						g.setEdgeWeight(g.getEdge(n, b.getID()), (sizeTmp * size));
+    					}
+    				}
+    			}
+    			
+    		}
+    		
     	}
     	return g;
     	

@@ -39,7 +39,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 
     
     private int distance;
-
+    private Boolean cleanRefuge = false;
     @Override
     public String toString() {
         return "Sample police force";
@@ -51,7 +51,6 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         model.indexClass(StandardEntityURN.ROAD);
         distance = config.getIntValue(DISTANCE_KEY);
         this.setCommunicationChannel(channel);
-        
     }
     
 
@@ -65,28 +64,42 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
             Logger.debug("Heard " + next);
         }
         
-        //verifica bloqueio mais proximo para limpar a area
-        List<EntityID> closestPath = new ArrayList<EntityID>();
-    	for(EntityID refuge : refugeIDs)
-    	{
-    		List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
-    		if(closestPath.isEmpty())
-    		{
-    			closestPath = path;
-    		}else{
-    			if(path.size() < closestPath.size())
-    			{
-    				closestPath = path;
-    			}
-    		}
+        //Am I near a blockade?
+    	Blockade someTarget = getTargetBlockade();
+    	if (someTarget != null) {
+        	Logger.info("Clearing blockade " + someTarget);
+        	sendClear(time, someTarget.getID());
+        	return;
     	}
-    	sendMove(time, closestPath);
-    	// Am I near a blockade?
-        Blockade target = getTargetBlockade();
-        if (target != null) {
-            Logger.info("Clearing blockade " + target);
-            sendClear(time, target.getID());
-            return;
+    	
+        if(cleanRefuge == false){
+        	//verifica bloqueio mais proximo para limpar a area
+        	List<EntityID> closestPath = new ArrayList<EntityID>();
+        	if(refugeIDs.isEmpty() == false)
+        	{
+        		for(EntityID refuge : refugeIDs)
+    			{
+    				List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+    				if(closestPath.isEmpty())
+    				{
+    					closestPath = path;
+    				}else{
+    					if(path.size() < closestPath.size())
+    					{
+    						closestPath = path;
+    					}
+    				}
+    			}
+    			sendMove(time, closestPath);
+    		// 	Am I near a blockade?
+        		Blockade target = getTargetBlockade();
+        		if (target != null) {
+            		Logger.info("Clearing blockade " + target);
+            		sendClear(time, target.getID());
+            		return;
+        		}
+        	}
+        	cleanRefuge = true;
         }
         
         
