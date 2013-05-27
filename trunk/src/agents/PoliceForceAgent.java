@@ -1,6 +1,5 @@
 package agents;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -14,12 +13,6 @@ import message.ReleaseInformation;
 import message.RetainedInformation;
 import message.TokenInformation;
 
-import org.jgrapht.Graph;
-import org.jgrapht.alg.DijkstraShortestPath;
-import org.jgrapht.alg.KruskalMinimumSpanningTree;
-import org.jgrapht.graph.DefaultWeightedEdge;
-import org.jgrapht.graph.ListenableUndirectedWeightedGraph;
-
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.messages.Command;
@@ -28,7 +21,6 @@ import rescuecore2.misc.geometry.GeometryTools2D;
 import rescuecore2.misc.geometry.Point2D;
 import rescuecore2.misc.geometry.Line2D;
 
-import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.standard.entities.Road;
@@ -84,7 +76,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BLOCKADE)
     	   	{
     	   		TokenInformation token = (TokenInformation)msg;    	   		
-    	   		System.out.println("Token Recebido "+token.getId()+" eu sou policial "+me().getID().getValue());
+    	   		//System.out.println("Token Recebido "+token.getId()+" eu sou policial "+me().getID().getValue());
     	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
     	   		//se limiar é menor que a capacidade do agente
     	   		Double capability = 0.0;
@@ -96,7 +88,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	   			{
     	   				token.setOwner(me().getID().getValue());
     	   				this.getPotentialValue().add(token);
-    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue());
+    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue(), me().getID().getValue());
     	   				this.sendMessage(time,  channel, retained);
     	   			}else{
     	   				this.getValue().add(token);

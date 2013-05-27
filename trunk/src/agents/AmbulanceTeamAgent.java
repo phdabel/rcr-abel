@@ -132,7 +132,7 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	    	   			{
 	    	   				token.setOwner(me().getID().getValue());
 	    	   				this.getPotentialValue().add(token);
-	    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue());
+	    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue(), me().getID().getValue());
 	    	   				this.sendMessage(time,  channel, retained);
 	    	   			}else{
 	    	   				this.getValue().add(token);

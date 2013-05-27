@@ -41,7 +41,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     private int maxPower;
     
     private ArrayList<Building> buildingDetected = new ArrayList<Building>();
-    
+    private ArrayList<Integer> potentialTmp = new ArrayList<Integer>();
     @Override
     public String toString() {
         return "FireBrigade LADCOP";
@@ -140,10 +140,10 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BUILDING_FIRE)
     	   	{
     	   		TokenInformation token = (TokenInformation)msg;    	   		
-    	   		System.out.println("Token Recebido "+token.getId()+" eu sou "+me().getID().getValue());
+    	   		System.out.println("Token Recebido "+token.getId()+" eu sou "+me().getID().getValue()+" limiar "+token.getThreshold());
     	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
     	   		
-    	   		
+    	   		/*
     	   		Collection<StandardEntity> otherTargets = this.tasksInRange(target.getID());
 	        	for(StandardEntity oT : otherTargets)
 	        	{
@@ -156,7 +156,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 	                    	this.sendMessage(time, channel, job);
 	                	}
 	        		}
-	        	}
+	        	}*/
     	   		
     	   		//se limiar é menor que a capacidade do agente
     	   		Double capability = 0.0;
@@ -164,11 +164,23 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   		if(token.getThreshold() < capability)
     	   		{
     	   			token.setCapability(capability);
+    	   			//AND MONITOR
     	   			if(token.getPotential() && token.getOwner() == 0)
     	   			{
     	   				token.setOwner(me().getID().getValue());
+    	   				if(potentialTmp.contains(token) == false)
+    	   				{
+    	   					this.potentialTmp.add(token.getAssociatedValue());
+    	   				}
+    	   				this.sendMessage(time, channel, token);
+    	   				
+    	   				
+    	   			}
+    	   			//TOKEN RECEIVED BY OTHER AGENT
+    	   			else if(token.getPotential() && token.getOwner() != 0 && token.getOwner() != me().getID().getValue()){
+    	   				token.setOwner(me().getID().getValue());
     	   				this.getPotentialValue().add(token);
-    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue());
+    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue(),me().getID().getValue());
     	   				this.sendMessage(time,  channel, retained);
     	   			}else{
     	   				this.getValue().add(token);
@@ -181,11 +193,11 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	   		{
                 		Building b = (Building)model.getEntity(new EntityID(ttmp.getAssociatedValue()));
                 		sumSpentResource += this.spentResource(b);
-                		System.out.println("Gasto de recurso para "+b.getID().getValue()+" - "+this.spentResource(b));
+                		//System.out.println("Gasto de recurso para "+b.getID().getValue()+" - "+this.spentResource(b));
         	   		}
         	   		if(sumSpentResource > this.myWaterQuantity())
         	   		{
-        	   			/*
+        	   			
         	   			ArrayList<TokenInformation> out = maxCap();
         	   			for(TokenInformation t : out)
         	   			{
@@ -193,11 +205,11 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	   				{
         	   					t.setOwner(me().getID().getValue());
         	   					ReleaseInformation release = new ReleaseInformation(t);
-        	   					this.sendMessage(time, Channel.FIRE_BRIGADE.ordinal(), release);
+        	   					this.sendMessage(time, channel, release);
         	   				}else{
-        	   					this.sendMessage(time, Channel.FIRE_BRIGADE.ordinal(), token);
+        	   					this.sendMessage(time, channel, token);
         	   				}
-        	   			}*/
+        	   			}
         	   		}
     	   			
     	   		}else{
@@ -223,13 +235,57 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   			this.getPotentialValue().remove(r.getToken());
     	   		}
     	   		
+    	   	}else if(msg instanceof RetainedInformation && potentialTmp.contains(((RetainedInformation)msg).getValue()) ){
+    	   		this.getRetained().add((RetainedInformation)msg);
+    	   	}else if(msg instanceof ReleaseInformation && potentialTmp.contains(((RetainedInformation)msg).getValue()) ){
+    	   		this.getRetained().remove((RetainedInformation)msg);
     	   	}
+    	   	//definir grupo para trabalho conjunto
+    	   	ArrayList<LockInformation> lockers = new ArrayList<LockInformation>();
+    	   	ArrayList<ReleaseInformation> releasers = new ArrayList<ReleaseInformation>();
+    	   	
+    	   for(RetainedInformation r : this.getRetained())
+    	   {
+    	   		TokenInformation tokenTmp = new TokenInformation(r.getValue(), true, MessageType.BUILDING_FIRE);
+    	   		tokenTmp.setThreshold(THRESHOLD);
+    	   		tokenTmp.setOwner(r.getSender());
+    	   		Integer tmpSize = this.getDijkstraPath(new EntityID(r.getSender()), new EntityID(tokenTmp.getAssociatedValue())).size();
+	   				
+    	   		if(potentialTmp.contains(r.getValue())  ){
+    	   			
+    	   			for(LockInformation l : lockers)
+    	   			{
+    	   				if(l.getToken().getAssociatedValue() == r.getValue())
+	   					{
+    	   					Integer lSize = this.getDijkstraPath(new EntityID(l.getToken().getOwner()), new EntityID(l.getToken().getId())).size(); 
+    	   					if(tmpSize < lSize)
+    	   					{
+    	   						lockers.remove(l);
+    	   						lockers.add(new LockInformation(tokenTmp));
+    	   						releasers.add(new ReleaseInformation(l.getToken()));
+    	   					}else{
+    	   						releasers.add(new ReleaseInformation(tokenTmp));
+    	   					}
+	   					}
+    	   			}
+    	   		}
+    	   }
+    	   for(LockInformation l : lockers)
+    	   {
+    		   this.sendMessage(time, channel, l);
+    	   }
+    	   for(ReleaseInformation r: releasers)
+    	   {
+    		   this.sendMessage(time, channel, r);
+    	   }
+    	   	
    	    }
     	ArrayList<TokenInformation> removeList = new ArrayList<TokenInformation>();
     	for(TokenInformation t : this.getValue())
     	{
-    		System.out.println("Lista de values "+this.getValue());
+    		//System.out.println("Lista de values "+this.getValue());
     		Building b = (Building)model.getEntity(new EntityID(t.getAssociatedValue()));
+    		
     		if(b.isOnFire()){
     			this.extinguishFire(time, new EntityID(t.getAssociatedValue()));
     		}else{
@@ -283,6 +339,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		ArrayList<TokenInformation> in = new ArrayList<TokenInformation>();
 		Double resTot = 0.0;
 		Collections.sort(this.getValue(), new ValueSorter());
+		System.out.println("values sorteados "+this.getValue());
 		for(TokenInformation t : this.getValue()){
 			Building b = (Building)model.getEntity(new EntityID(t.getAssociatedValue()));
     		Double spentResource = this.spentResource(b);
@@ -325,13 +382,13 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		{ 
 			if(next.getTotalArea() < 200)
 			{
-				System.out.println("Get Fire Job detectou predio "+next.getID().getValue()+" Agente: "+me().getID().getValue());
+				//System.out.println("Get Fire Job detectou predio "+next.getID().getValue()+" Agente: "+me().getID().getValue());
 				TokenInformation _t = new TokenInformation(next.getID().getValue(), false, MessageType.BUILDING_FIRE);
 				_t.setThreshold(THRESHOLD);
 				buildingFire.add(_t);
 			}else
 			{
-				System.out.println("Get Fire Job detectou predio com potential "+next.getID().getValue());
+				//System.out.println("Get Fire Job detectou predio com potential "+next.getID().getValue());
 				Integer totalTokens = Math.abs(next.getTotalArea() / 100);
 				for(int i = 0; i < totalTokens; i++)
 				{

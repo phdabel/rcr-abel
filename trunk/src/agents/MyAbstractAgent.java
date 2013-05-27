@@ -19,7 +19,9 @@ import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.ListenableUndirectedWeightedGraph;
 
 import message.ColeagueInformation;
+import message.LockInformation;
 import message.MyMessage;
+import message.ReleaseInformation;
 import message.RetainedInformation;
 import message.Serializer;
 import message.TokenInformation;
@@ -383,6 +385,15 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
                     	this.getReceivedMessage().add(tmp);
                     } else if (object instanceof ColeagueInformation) {
                     	ColeagueInformation tmp = (ColeagueInformation)object;
+                    	this.getReceivedMessage().add(tmp);
+                    }else if(object instanceof RetainedInformation){
+                    	RetainedInformation tmp = (RetainedInformation)object;
+                    	this.getReceivedMessage().add(tmp);
+                    }else if(object instanceof ReleaseInformation){
+                    	ReleaseInformation tmp = (ReleaseInformation)object;
+                    	this.getReceivedMessage().add(tmp);
+                    }else if(object instanceof LockInformation){
+                    	LockInformation tmp = (LockInformation)object;
                     	this.getReceivedMessage().add(tmp);
                     }else if (object instanceof ArrayList) {
                     	for(TokenInformation t : (ArrayList<TokenInformation>)object)
