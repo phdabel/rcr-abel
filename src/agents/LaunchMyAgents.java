@@ -129,17 +129,18 @@ public class LaunchMyAgents {
         catch (ComponentConnectionException e) {
             Logger.info("failed: " + e.getMessage());
         }
+            
+        try {
+            while (true) {
+                Logger.info("Connecting centre " + (i++) + "...");
+                launcher.connect(new CenterAgent());
+                Logger.info("success");
+            }
+        }
+        catch (ComponentConnectionException e) {
+            Logger.info("failed: " + e.getMessage());
+        }
             /*
-            try {
-                while (true) {
-                    Logger.info("Connecting centre " + (i++) + "...");
-                    launcher.connect(new SampleCentre());
-                    Logger.info("success");
-                }
-            }
-            catch (ComponentConnectionException e) {
-                Logger.info("failed: " + e.getMessage());
-            }
             try {
                 while (true) {
                     Logger.info("Connecting dummy agent " + (i++) + "...");
