@@ -48,9 +48,9 @@ public class LaunchMyAgents {
 			args = CommandLineOptions.processArgs(args, config);
 			int port = config.getIntValue(Constants.KERNEL_PORT_NUMBER_KEY, Constants.DEFAULT_KERNEL_PORT_NUMBER);
 			String host = config.getValue(Constants.KERNEL_HOST_NAME_KEY, Constants.DEFAULT_KERNEL_HOST_NAME);
-			int fb = 10;
-			int pf = 10;
-			int at = 10;
+			int fb = -1;
+			int pf = -1;
+			int at = -1;
 			// CHECKSTYLE:OFF:ModifiedControlVariable
 			for (int i = 0; i < args.length; ++i) {
 				if (args[i].equals(FIRE_BRIGADE_FLAG)) {

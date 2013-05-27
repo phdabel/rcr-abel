@@ -53,6 +53,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 
     private static final String SAY_COMMUNICATION_MODEL = StandardCommunicationModel.class.getName();
     private static final String SPEAK_COMMUNICATION_MODEL = ChannelCommunicationModel.class.getName();
+    protected static final Double THRESHOLD = 0.5;
     private int communicationChannel;
     /**
        The search algorithm.
@@ -85,7 +86,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     protected boolean	channelComm;
     
     private ArrayList<Integer> coleagues = new ArrayList<Integer>();
-    
+    private ArrayList<EntityID> otherJobs = new ArrayList<EntityID>();
     private List<TokenInformation> value = new ArrayList<TokenInformation>();
     private ArrayList<TokenInformation> potentialValue = new ArrayList<TokenInformation>();
     private ArrayList<MyMessage> receivedMessages = new ArrayList<MyMessage>();
@@ -263,6 +264,29 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     
     /**
      * 
+     * @param targetPosition EntityID do alvo
+     * @return retorna objetos em um raio de 400??? do alvo mencionado
+     */
+    protected Collection<StandardEntity> tasksInRange(EntityID targetPosition)
+    {
+    	Collection<StandardEntity> targets = model.getObjectsInRange(targetPosition, 400);
+    	return targets;
+    }
+    
+    /**
+     * 
+     * @param targetPosition EntityID do alvo
+     * @param range distancia maxima
+     * @return retorna objetos dentro de um raio informado
+     */
+    protected Collection<StandardEntity> tasksInRange(EntityID targetPosition, int range)
+    {
+    	Collection<StandardEntity> targets = model.getObjectsInRange(targetPosition, range);
+    	return targets;
+    }
+    
+    /**
+     * 
      * @param sourcePosition - location of the agent
      * @param targetPosition - location of the target 
      * @param range
@@ -274,7 +298,21 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
         if (targets.isEmpty()) {
             return null;
         }
-        return search.breadthFirstSearch(sourcePosition, objectsToIDs(targets));
+        List<EntityID> shortestPath = new ArrayList<EntityID>();
+        for(EntityID t : objectsToIDs(targets))
+        {
+        	List<EntityID> path = this.getDijkstraPath(sourcePosition, t);
+        	if(shortestPath.isEmpty())
+        	{
+        		shortestPath = path;
+        	}else{
+        		if(path.size() < shortestPath.size())
+        		{
+        			shortestPath = path;
+        		}
+        	}
+        }
+        return shortestPath;
     }
     
     /**
@@ -450,6 +488,14 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 
 	public void setRetained(ArrayList<RetainedInformation> retained) {
 		this.retained = retained;
+	}
+
+	public ArrayList<EntityID> getOtherJobs() {
+		return otherJobs;
+	}
+
+	public void setOtherJobs(ArrayList<EntityID> otherJobs) {
+		this.otherJobs = otherJobs;
 	}
 
 

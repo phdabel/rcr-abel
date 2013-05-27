@@ -7,6 +7,12 @@ import java.util.Collection;
 import java.util.EnumSet;
 
 import message.Channel;
+import message.ColeagueInformation;
+import message.LockInformation;
+import message.MessageType;
+import message.ReleaseInformation;
+import message.RetainedInformation;
+import message.TokenInformation;
 
 import org.jgrapht.Graph;
 import org.jgrapht.alg.DijkstraShortestPath;
@@ -22,6 +28,7 @@ import rescuecore2.misc.geometry.GeometryTools2D;
 import rescuecore2.misc.geometry.Point2D;
 import rescuecore2.misc.geometry.Line2D;
 
+import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.standard.entities.Road;
@@ -60,9 +67,77 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
             // Subscribe to channel 1
         	sendSubscribe(time, this.getCommunicationChannel());
         }
-        for (Command next : heard) {
-            Logger.debug("Heard " + next);
-        }
+        
+        this.heardMessage(heard);
+        //acrescentar as mensagens, as tasks obtidas pelo proprio agente
+        //this.getReceivedMessage().addAll(this.getFireJob());
+        for(Object msg: this.getReceivedMessage())
+    	{
+    	   	if(msg instanceof ColeagueInformation)
+    	   	{
+    	   		ColeagueInformation tmpColeague = (ColeagueInformation)msg;
+    	   		if(this.getColeagues().contains((Integer)tmpColeague.getId()) == false)
+    	   		{
+    	   			this.getColeagues().add((Integer)tmpColeague.getId());
+    	   		}
+    	   	}
+    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BLOCKADE)
+    	   	{
+    	   		TokenInformation token = (TokenInformation)msg;    	   		
+    	   		System.out.println("Token Recebido "+token.getId()+" eu sou policial "+me().getID().getValue());
+    	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
+    	   		//se limiar é menor que a capacidade do agente
+    	   		Double capability = 0.0;
+    	   		capability = this.computeCapability(target.getID());   	   		
+    	   		if(token.getThreshold() < capability)
+    	   		{
+    	   			token.setCapability(capability);
+    	   			if(token.getPotential() && token.getOwner() == 0)
+    	   			{
+    	   				token.setOwner(me().getID().getValue());
+    	   				this.getPotentialValue().add(token);
+    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue());
+    	   				this.sendMessage(time,  channel, retained);
+    	   			}else{
+    	   				this.getValue().add(token);
+    	   			}
+    	   		}else{
+    	   			this.sendMessage(time, channel, token);
+    	   		}
+    	   	}else if(msg instanceof LockInformation){
+    	   		TokenInformation token = ((LockInformation)msg).getToken();
+    	   		if(this.getPotentialValue().contains(token)==true){
+    	   			this.getPotentialValue().remove(token);
+    	   			this.getValue().add(token);
+    	   		}else{
+    	   			TokenInformation t = ((LockInformation)msg).getToken();
+    	   			t.setOwner(me().getID().getValue());
+    	   			ReleaseInformation r = new ReleaseInformation(t);
+    	   			this.sendMessage(time, channel, r);
+    	   		}
+    	   	
+    	   	}else if(msg instanceof ReleaseInformation){
+    	   		ReleaseInformation r = (ReleaseInformation)msg;
+    	   		if(r.getToken().getOwner() == me().getID().getValue())
+    	   		{
+    	   			this.getPotentialValue().remove(r.getToken());
+    	   		}
+    	   		
+    	   	}
+    	   	ArrayList<TokenInformation> removeList = new ArrayList<TokenInformation>();
+        	for(TokenInformation t : this.getValue())
+        	{
+        		Road r = (Road)model.getEntity(new EntityID(t.getAssociatedValue()));
+        		if(r.isBlockadesDefined()){
+        			this.getDijkstraPath(me().getPosition(), r.getID());
+        			sendClear(time, r.getID());
+        		}else{
+        			removeList.add(t);
+        		}
+        	}
+        	this.getValue().removeAll(removeList);
+    	}
+        
         
         //Am I near a blockade?
     	Blockade someTarget = getTargetBlockade();
@@ -120,10 +195,11 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
             	return;
         	}
         }
-        
-        Logger.debug("Couldn't plan a path to a blocked road");
-        Logger.info("Moving randomly");
-        sendMove(time, randomWalk());
+        if(this.getValue().isEmpty()){
+        	Logger.debug("Couldn't plan a path to a blocked road");
+        	Logger.info("Moving randomly");
+        	sendMove(time, randomWalk());
+        }
     }
 
     @Override
