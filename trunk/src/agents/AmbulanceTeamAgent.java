@@ -8,13 +8,18 @@ import java.util.EnumSet;
 import java.util.HashSet;
 
 import message.Channel;
+import message.ColeagueInformation;
+import message.LockInformation;
+import message.MessageType;
+import message.ReleaseInformation;
+import message.RetainedInformation;
 import message.TokenInformation;
 
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.messages.Command;
 import rescuecore2.log.Logger;
-
+import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.standard.entities.AmbulanceTeam;
@@ -46,10 +51,21 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	            // Subscribe to channel 1
 	            sendSubscribe(time, channel);
 	        }
+	        
 	        for (Command next : heard) {
 	            Logger.debug("Heard " + next);
 	        }
+	        
+	        if(me().getBuriedness() > 0)
+	        {
+	        	System.out.println("ambulance preso em "+me().getPosition().getValue());
+	        	TokenInformation t = new TokenInformation(me().getPosition().getValue(), false, MessageType.BLOCKADE);
+	        	t.setThreshold(THRESHOLD);
+	        	sendMessage(time, channel, t);
+	        }
+	        
 	        updateUnexploredBuildings(changed);
+	        
 	        // Am I transporting a civilian to a refuge?
 	        if (someoneOnBoard()) {
 	            // Am I at a refuge?
@@ -86,9 +102,73 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	                Logger.debug("Failed to plan path to refuge");
 	            }
 	        }
-	        // Go through targets (sorted by distance) and check for things we can do
-	        for (Human next : getTargets()) {
-	            if (next.getPosition().equals(location().getID())) {
+	        this.heardMessage(heard);
+	    	this.getReceivedMessage().addAll(this.getTargets());
+	    	/**
+	    	 *  inicio do LA DCOP
+	    	 */
+	    	for(Object msg: this.getReceivedMessage())
+	    	{
+	    	   	if(msg instanceof ColeagueInformation)
+	    	   	{
+	    	   		ColeagueInformation tmpColeague = (ColeagueInformation)msg;
+	    	   		if(this.getColeagues().contains((Integer)tmpColeague.getId()) == false)
+	    	   		{
+	    	   			this.getColeagues().add((Integer)tmpColeague.getId());
+	    	   		}
+	    	   	}
+	    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.RESCUE)
+	    	   	{
+	    	   		TokenInformation token = (TokenInformation)msg;
+	    	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
+	    	   		
+	    	   		//se limiar é menor que a capacidade do agente
+	    	   		Double capability = 0.0;
+	    	   		capability = this.computeCapability(target.getID());
+	    	   		if(token.getThreshold() < capability)
+	    	   		{
+	    	   			token.setCapability(capability);
+	    	   			if(token.getPotential() && token.getOwner() == 0)
+	    	   			{
+	    	   				token.setOwner(me().getID().getValue());
+	    	   				this.getPotentialValue().add(token);
+	    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue());
+	    	   				this.sendMessage(time,  channel, retained);
+	    	   			}else{
+	    	   				this.getValue().add(token);
+	    	   			}
+	    	   			
+	    	   		}else{
+	    	   			this.sendMessage(time, channel, token);
+	    	   		}
+	    			
+	    	   	}else if(msg instanceof LockInformation){
+	    	   		TokenInformation token = ((LockInformation)msg).getToken();
+	    	   		if(this.getPotentialValue().contains(token)==true){
+	    	   			this.getPotentialValue().remove(token);
+	    	   			this.getValue().add(token);
+	    	   		}else{
+	    	   			TokenInformation t = ((LockInformation)msg).getToken();
+	    	   			t.setOwner(me().getID().getValue());
+	    	   			ReleaseInformation r = new ReleaseInformation(t);
+	    	   			this.sendMessage(time, channel, r);
+	    	   		}
+	    	   	
+	    	   	}else if(msg instanceof ReleaseInformation){
+	    	   		ReleaseInformation r = (ReleaseInformation)msg;
+	    	   		if(r.getToken().getOwner() == me().getID().getValue())
+	    	   		{
+	    	   			this.getPotentialValue().remove(r.getToken());
+	    	   		}
+	    	   		
+	    	   	}
+	   	    }
+	    	ArrayList<TokenInformation> removeList = new ArrayList<TokenInformation>();
+	    	for(TokenInformation t : this.getValue())
+	    	{
+	    		
+	    		Human next = (Human)model.getEntity(new EntityID(t.getAssociatedValue()));
+	    		if (next.getPosition().equals(location().getID())) {
 	                // Targets in the same place might need rescueing or loading
 	                if ((next instanceof Civilian) && next.getBuriedness() == 0 && !(location() instanceof Refuge)) {
 	                    // Load
@@ -112,7 +192,13 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	                    return;
 	                }
 	            }
-	        }
+	    		removeList.add(t);
+	    	}
+	    	this.getValue().removeAll(removeList);
+	    	/**
+	    	 * fim
+	    	 */
+	    	
 	        // Nothing to do
 	        List<EntityID> closestPathToLookUp = new ArrayList<EntityID>();
 	        if(unexploredBuildings.isEmpty() == false)
@@ -157,7 +243,7 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	        return false;
 	    }
 
-	    private List<Human> getTargets() {
+	    private ArrayList<TokenInformation> getTargets() {
 	        List<Human> targets = new ArrayList<Human>();
 	        for (StandardEntity next : model.getEntitiesOfType(StandardEntityURN.CIVILIAN, StandardEntityURN.FIRE_BRIGADE, StandardEntityURN.POLICE_FORCE, StandardEntityURN.AMBULANCE_TEAM)) {
 	            Human h = (Human)next;
@@ -176,16 +262,30 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	        }
 	        Collections.sort(targets, new DistanceSorter(location(), model));
 	        ArrayList<TokenInformation> rescueJob = new ArrayList<TokenInformation>();
-	        /*for(Human next: targets)
+	        for(Human next: targets)
 	        {
-	        	if(se tiver bloqueio proximo cria token para bloqueio e token para civil)
+	        	Collection<StandardEntity> otherTargets = this.tasksInRange(next.getPosition());
+	        	for(StandardEntity oT : otherTargets)
 	        	{
-	        		
-	        	}elseif(){
-	        		
+	        		System.out.println("StandardURN "+oT.getStandardURN());
+	        		System.out.println("Road URN "+StandardEntityURN.ROAD);
+	        		if(oT.getStandardURN() == StandardEntityURN.ROAD)
+	        		{
+	        			Road r = (Road)oT;
+	                	if (r.isBlockadesDefined() && !r.getBlockades().isEmpty() && this.getOtherJobs().contains(r.getID()) == false ) {
+	                		this.getOtherJobs().add(r.getID());
+	                		TokenInformation job = new TokenInformation(r.getID().getValue(), true, MessageType.BLOCKADE);
+	                		job.setThreshold(THRESHOLD);
+	                    	rescueJob.add(job);
+	                	}
+	        		}
 	        	}
-	        }*/
-	        return targets;
+	        	TokenInformation job = new TokenInformation(next.getID().getValue(), false, MessageType.RESCUE);
+	        	job.setThreshold(THRESHOLD);
+	        	rescueJob.add(job);
+	        	
+	        }
+	        return rescueJob;
 	    }
 
 	    private void updateUnexploredBuildings(ChangeSet changed) {

@@ -10,7 +10,6 @@ import message.Channel;
 import message.ColeagueInformation;
 import message.LockInformation;
 import message.MessageType;
-import message.MyMessage;
 import message.ReleaseInformation;
 import message.RetainedInformation;
 import message.TokenInformation;
@@ -19,6 +18,7 @@ import rescuecore2.messages.Command;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.FireBrigade;
 import rescuecore2.standard.entities.Refuge;
+import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.ChangeSet;
@@ -35,7 +35,6 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 	private static final String MAX_WATER_KEY = "fire.tank.maximum";
     private static final String MAX_DISTANCE_KEY = "fire.extinguish.max-distance";
     private static final String MAX_POWER_KEY = "fire.extinguish.max-sum";
-    private static final Double THRESHOLD = 0.5;
     private static final int channel = Channel.BROADCAST.ordinal();
     private int maxWater;
     private int maxDistance;
@@ -85,7 +84,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     					me().getID().getValue(),
     					me().getPosition().getValue()
     					);
-			this.sendMessage(time, this.getCommunicationChannel(), meInformation);
+			this.sendMessage(time, channel, meInformation);
 		}
 		// Are we currently filling with water?
         if (me().isWaterDefined() && me().getWater() < maxWater && location() instanceof Refuge) {
@@ -143,11 +142,25 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   		TokenInformation token = (TokenInformation)msg;    	   		
     	   		System.out.println("Token Recebido "+token.getId()+" eu sou "+me().getID().getValue());
     	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
+    	   		
+    	   		
+    	   		Collection<StandardEntity> otherTargets = this.tasksInRange(target.getID());
+	        	for(StandardEntity oT : otherTargets)
+	        	{
+	        		if(oT.getStandardURN() == StandardEntityURN.ROAD)
+	        		{
+	        			Road r = (Road)oT;
+	                	if (r.isBlockadesDefined() && !r.getBlockades().isEmpty() && this.getOtherJobs().contains(r.getID()) == false ) {
+	                		this.getOtherJobs().add(r.getID());
+	                		TokenInformation job = new TokenInformation(r.getID().getValue(), true, MessageType.BLOCKADE);
+	                    	this.sendMessage(time, channel, job);
+	                	}
+	        		}
+	        	}
+    	   		
     	   		//se limiar é menor que a capacidade do agente
     	   		Double capability = 0.0;
     	   		capability = this.computeCapability(target.getID());
-    	   		System.out.println("Capability do agente para o token "+capability);
-    	   		System.out.println("Capability do token "+token.getThreshold());
     	   		if(token.getThreshold() < capability)
     	   		{
     	   			token.setCapability(capability);
@@ -156,7 +169,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   				token.setOwner(me().getID().getValue());
     	   				this.getPotentialValue().add(token);
     	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue());
-    	   				this.sendMessage(time, Channel.FIRE_BRIGADE.ordinal(), retained);
+    	   				this.sendMessage(time,  channel, retained);
     	   			}else{
     	   				this.getValue().add(token);
     	   			}
@@ -188,7 +201,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	   		}
     	   			
     	   		}else{
-    	   			this.sendMessage(time, Channel.FIRE_BRIGADE.ordinal(), token);
+    	   			this.sendMessage(time, channel, token);
     	   		}
     			
     	   	}else if(msg instanceof LockInformation){
@@ -200,7 +213,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   			TokenInformation t = ((LockInformation)msg).getToken();
     	   			t.setOwner(me().getID().getValue());
     	   			ReleaseInformation r = new ReleaseInformation(t);
-    	   			this.sendMessage(time, Channel.FIRE_BRIGADE.ordinal(), r);
+    	   			this.sendMessage(time, channel, r);
     	   		}
     	   	
     	   	}else if(msg instanceof ReleaseInformation){
