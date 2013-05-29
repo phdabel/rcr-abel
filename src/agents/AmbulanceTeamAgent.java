@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Random;
 
 import message.Channel;
 import message.ColeagueInformation;
@@ -19,6 +20,7 @@ import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.messages.Command;
 import rescuecore2.log.Logger;
+import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -32,7 +34,9 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 
 	    private Collection<EntityID> unexploredBuildings;
 	    private static final int channel = Channel.BROADCAST.ordinal();
-
+	    private List<EntityID> currentPath = new ArrayList<EntityID>();
+	    private EntityID lastVertex;
+	    private EntityID civillianToSave;
 	    @Override
 	    public String toString() {
 	        return "Sample ambulance team";
@@ -52,9 +56,16 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	            sendSubscribe(time, channel);
 	        }
 	        
-	        for (Command next : heard) {
-	            Logger.debug("Heard " + next);
-	        }
+	        if(time <= 5){
+	    		
+				ColeagueInformation meInformation =
+	    			new ColeagueInformation(
+	    					me().getID().getValue(),
+	    					me().getPosition().getValue()
+	    					);
+				this.sendMessage(time, channel, meInformation);
+			}
+	        
 	        
 	        if(me().getBuriedness() > 0)
 	        {
@@ -77,25 +88,34 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	            }
 	            else {
 	            	
-	                // Move to a closest refuge (djikstra algorithm)
-	            	List<EntityID> closestPath = new ArrayList<EntityID>();
-	            	for(EntityID refuge : refugeIDs)
-	            	{
-	            		List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
-	            		if(closestPath.isEmpty())
+	            	if((currentPath.isEmpty() || lastVertex != currentPath.get(currentPath.size()-1))){
+	            		List<EntityID> closestPath = new ArrayList<EntityID>();
+	            		
+	            		//verifica bloqueio mais proximo para limpar a area
+	            		if(refugeIDs.isEmpty() == false)
 	            		{
-	            			closestPath = path;
-	            		}else{
-	            			if(path.size() < closestPath.size())
+	            			for(EntityID refuge : refugeIDs)
 	            			{
-	            				closestPath = path;
+	            				List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+	            				if(closestPath.isEmpty())
+	            				{
+	            					closestPath = path;
+	            				}else{
+	            					if(path.size() < closestPath.size())
+	            					{
+	            						closestPath = path;
+	            					}
+	            				}
 	            			}
 	            		}
+	            		lastVertex = closestPath.get(closestPath.size()-1);
+	            		currentPath = closestPath;
 	            	}
 	            	
-	            	if (closestPath != null) {
+	            	if (currentPath.isEmpty() == false) {
 	                    Logger.info("Moving to refuge");
-	                    sendMove(time, closestPath);
+	                    currentPath = this.walk(currentPath);
+	                	sendMove(time,currentPath);
 	                    return;
 	                }
 	                // What do I do now? Might as well carry on and see if we can dig someone else out.
@@ -163,69 +183,77 @@ public class AmbulanceTeamAgent extends MyAbstractAgent<AmbulanceTeam> {
 	    	   		
 	    	   	}
 	   	    }
-	    	ArrayList<TokenInformation> removeList = new ArrayList<TokenInformation>();
-	    	for(TokenInformation t : this.getValue())
+	    	
+	    	if( (currentPath.isEmpty() ||
+	    			lastVertex != currentPath.get((currentPath.size()-1))) && this.getValue().isEmpty() == false)
 	    	{
-	    		
-	    		Human next = (Human)model.getEntity(new EntityID(t.getAssociatedValue()));
-	    		if (next.getPosition().equals(location().getID())) {
-	                // Targets in the same place might need rescueing or loading
-	                if ((next instanceof Civilian) && next.getBuriedness() == 0 && !(location() instanceof Refuge)) {
-	                    // Load
-	                    Logger.info("Loading " + next);
-	                    sendLoad(time, next.getID());
-	                    return;
-	                }
-	                if (next.getBuriedness() > 0) {
-	                    // Rescue
-	                    Logger.info("Rescueing " + next);
-	                    sendRescue(time, next.getID());
-	                    return;
-	                }
-	            }
-	            else {
-	                // Try to move to the target
-	            	List<EntityID> path = this.getDijkstraPath(me().getPosition(), next.getPosition());
-	                if (path != null) {
-	                    Logger.info("Moving to target");
-	                    sendMove(time, path);
-	                    return;
-	                }
-	            }
-	    		removeList.add(t);
+	    		int index = new Random().nextInt(this.getValue().size());
+		    	TokenInformation t = this.getValue().get(index);
+		    	Human next = (Human)model.getEntity(new EntityID(t.getAssociatedValue()));
+		    	civillianToSave = next.getID();
+		    	lastVertex = next.getPosition();
+	    		currentPath = this.getDijkstraPath(me().getPosition(), lastVertex);
+	    		this.getValue().remove(t);
+	    			
+	    	}else if(currentPath.isEmpty() == false &&  lastVertex == currentPath.get(currentPath.size()-1)){
+	    		Human next = (Human)model.getEntity(civillianToSave);
+		    	
+	    		if(next.getPosition().equals(location().getID())){
+	    			if(next instanceof Civilian && next.getBuriedness() == 0 && !(location() instanceof Refuge))
+	    			{
+	    				Logger.info("Loading "+next);
+	    				sendLoad(time, next.getID());
+	    				return;
+	    			}
+	    				
+	    		}else if(next.getBuriedness() > 0)
+	    		{
+	    			Logger.info("Rescueing "+next);
+	    			sendRescue(time,next.getID());
+	    			return;
+	    		}
 	    	}
-	    	this.getValue().removeAll(removeList);
+	    		// Try to move to the target
+	        currentPath = this.walk(currentPath);
+	        if (currentPath != null) {
+	        	Logger.info("Moving to target");
+	            sendMove(time, currentPath);
+	            return;    
+	    	}
+	    	
 	    	/**
 	    	 * fim
 	    	 */
 	    	
 	        // Nothing to do
-	        List<EntityID> closestPathToLookUp = new ArrayList<EntityID>();
-	        if(unexploredBuildings.isEmpty() == false)
-	        {
-	        	for(EntityID building : unexploredBuildings)
-	        	{	
-        			List<EntityID> path = this.getDijkstraPath(me().getPosition(), building);
-        			if(closestPathToLookUp.isEmpty())
-        			{
-        				closestPathToLookUp = path;
-        			}else{
-        				if(path.size() < closestPathToLookUp.size())
-        				{
-        					closestPathToLookUp = path;
-        				}
-        			}
-        		}
+	    	if(this.getValue().isEmpty() && currentPath.isEmpty())
+	    	{
+	    		List<EntityID> closestPathToLookUp = new ArrayList<EntityID>();
+		        if(unexploredBuildings.isEmpty() == false)
+		        {
+		        	for(EntityID building : unexploredBuildings)
+		        	{
+		        		List<EntityID> path = this.getDijkstraPath(me().getPosition(), building);
+		        		if(closestPathToLookUp.isEmpty())
+		        		{
+		        			closestPathToLookUp = path;
+		        		}else if(path.size() < closestPathToLookUp.size())
+		        		{
+		        			closestPathToLookUp = path;
+		        		}
+		        	}
+		        	
+		        }
+		        if(closestPathToLookUp.isEmpty() == false)
+		        {
+		        	Logger.info("Searching buildings");
+		        	closestPathToLookUp = this.walk(closestPathToLookUp);
+		        	sendMove(time, closestPathToLookUp);
+		        	return;
+		        }
+	    		
+	    	}
         	
-        		if (closestPathToLookUp != null) {
-                	Logger.info("Searching buildings");
-                	sendMove(time, closestPathToLookUp);
-                	return;
-            	}
-	        }
-	        
-	        Logger.info("Moving randomly");
-	        sendMove(time, randomWalk());
 	    }
 
 	    @Override

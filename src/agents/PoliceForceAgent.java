@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.Random;
 
 import message.Channel;
 import message.ColeagueInformation;
@@ -21,6 +22,7 @@ import rescuecore2.misc.geometry.GeometryTools2D;
 import rescuecore2.misc.geometry.Point2D;
 import rescuecore2.misc.geometry.Line2D;
 
+import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.standard.entities.Road;
@@ -35,10 +37,12 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 	
 	private static final int channel = Channel.BROADCAST.ordinal();
     private static final String DISTANCE_KEY = "clear.repair.distance";
-
-    
+    private List<EntityID> currentPath = new ArrayList<EntityID>();
+    private EntityID lastVertex;
     private int distance;
     private Boolean cleanRefuge = false;
+    private TokenInformation tokenDef;
+    private Boolean pathDefined;
     @Override
     public String toString() {
         return "Sample police force";
@@ -60,6 +64,16 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         	sendSubscribe(time, this.getCommunicationChannel());
         }
         
+        if(time <= 5){
+    		
+			ColeagueInformation meInformation =
+    			new ColeagueInformation(
+    					me().getID().getValue(),
+    					me().getPosition().getValue()
+    					);
+			this.sendMessage(time, channel, meInformation);
+		}
+        
         this.heardMessage(heard);
         //acrescentar as mensagens, as tasks obtidas pelo proprio agente
         //this.getReceivedMessage().addAll(this.getFireJob());
@@ -73,7 +87,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	   			this.getColeagues().add((Integer)tmpColeague.getId());
     	   		}
     	   	}
-    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BLOCKADE)
+    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.RESCUE )
     	   	{
     	   		TokenInformation token = (TokenInformation)msg;    	   		
     	   		//System.out.println("Token Recebido "+token.getId()+" eu sou policial "+me().getID().getValue());
@@ -116,18 +130,21 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	   		}
     	   		
     	   	}
-    	   	ArrayList<TokenInformation> removeList = new ArrayList<TokenInformation>();
-        	for(TokenInformation t : this.getValue())
-        	{
-        		Road r = (Road)model.getEntity(new EntityID(t.getAssociatedValue()));
-        		if(r.isBlockadesDefined()){
-        			this.getDijkstraPath(me().getPosition(), r.getID());
-        			sendClear(time, r.getID());
-        		}else{
-        			removeList.add(t);
-        		}
+    	   	
+    	   	
+    	   	if(this.getValue().isEmpty() == false && this.tokenDef == null && pathDefined == false){
+        		int index = new Random().nextInt(this.getValue().size());
+        		TokenInformation t = this.getValue().get(index);
+        		tokenDef = t;
+        		StandardEntity s = model.getEntity(new EntityID(t.getAssociatedValue()));
+    	   		Human h = (Human)s;
+        		currentPath = this.getDijkstraPath(me().getPosition(), h.getPosition());
+        		System.out.println("caminho ate as vitimas "+currentPath);
+        		pathDefined = true;
+        	}else if(this.getValue().isEmpty() == false && this.tokenDef != null){
+        		currentPath = walk(currentPath);
+        		sendMove(time, currentPath);
         	}
-        	this.getValue().removeAll(removeList);
     	}
         
         
@@ -140,58 +157,70 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	}
     	
         if(cleanRefuge == false){
-        	//verifica bloqueio mais proximo para limpar a area
-        	List<EntityID> closestPath = new ArrayList<EntityID>();
-        	if(refugeIDs.isEmpty() == false)
-        	{
-        		for(EntityID refuge : refugeIDs)
-    			{
-    				List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
-    				if(closestPath.isEmpty())
-    				{
-    					closestPath = path;
-    				}else{
-    					if(path.size() < closestPath.size())
-    					{
-    						closestPath = path;
-    					}
-    				}
-    			}
-    			sendMove(time, closestPath);
-    		// 	Am I near a blockade?
-        		Blockade target = getTargetBlockade();
-        		if (target != null) {
-            		Logger.info("Clearing blockade " + target);
-            		sendClear(time, target.getID());
-            		return;
+        	
+        	if(currentPath.isEmpty()){
+        		List<EntityID> closestPath = new ArrayList<EntityID>();
+        		
+        		//verifica bloqueio mais proximo para limpar a area
+        		if(refugeIDs.isEmpty() == false)
+        		{
+        			for(EntityID refuge : refugeIDs)
+        			{
+        				List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+        				if(closestPath.isEmpty())
+        				{
+        					closestPath = path;
+        				}else{
+        					if(path.size() < closestPath.size())
+        					{
+        						closestPath = path;
+        					}
+        				}
+        			}
         		}
+        		currentPath = closestPath;
+        	}
+        	
+        	currentPath = this.walk(currentPath);
+        	sendMove(time,currentPath);
+        	// 	Am I near a blockade?
+        	Blockade target = getTargetBlockade();
+        	if (target != null) {
+        		Logger.info("Clearing blockade " + target);
+        		sendClear(time, target.getID());
+        		return;
         	}
         	cleanRefuge = true;
-        }
+        }    
         
         
         // Plan a path to a blocked area
         
         //List<EntityID> path = search.breadthFirstSearch(me().getPosition(), getBlockedRoads());
+        
         if(getBlockedRoads().isEmpty() == false)
         {
-        	List<EntityID> path = getDijkstraPath(me().getPosition(), getBlockedRoads().get(0));
-        
-        	if (path != null) {
-            	Logger.info("Moving to target");
-            	Road r = (Road)model.getEntity(path.get(path.size() - 1));
-            	Blockade b = getTargetBlockade(r, -1);
-            	sendMove(time, path, b.getX(), b.getY());
-            	Logger.debug("Path: " + path);
-            	Logger.debug("Target coordinates: " + b.getX() + ", " + b.getY());
+        	if((currentPath.isEmpty() || lastVertex != currentPath.get(currentPath.size()-1)))
+        	{
+        		int index = new Random().nextInt(getBlockedRoads().size());
+        		List<EntityID> path = getDijkstraPath(me().getPosition(), getBlockedRoads().get(index));
+        		lastVertex = path.get(path.size()-1);
+        		currentPath = path;
+        	}
+        	
+        	if (currentPath.isEmpty() == false) {
+            	currentPath = this.walk(currentPath);
+            	sendMove(time, currentPath);
             	return;
         	}
         }
-        if(this.getValue().isEmpty()){
-        	Logger.debug("Couldn't plan a path to a blocked road");
-        	Logger.info("Moving randomly");
-        	sendMove(time, randomWalk());
-        }
+        
+        Logger.debug("Couldn't plan a path to a blocked road");
+        Logger.info("Moving randomly");
+        currentPath = this.walk(currentPath);
+        sendMove(time, currentPath);
+        return;
+        
     }
 
     @Override
