@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 
 import message.Channel;
 import message.ColeagueInformation;
@@ -17,6 +19,7 @@ import rescuecore2.log.Logger;
 import rescuecore2.messages.Command;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.FireBrigade;
+import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Refuge;
 import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
@@ -24,6 +27,8 @@ import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.worldmodel.EntityID;
 import sample.DistanceSorter;
+import worldmodel.jobs.Token;
+import static rescuecore2.misc.Handy.objectsToIDs;
 
 
 public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
@@ -42,6 +47,9 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     
     private ArrayList<Building> buildingDetected = new ArrayList<Building>();
     private ArrayList<Integer> potentialTmp = new ArrayList<Integer>();
+    private List<EntityID> currentPath = new ArrayList<EntityID>();
+    private Boolean pathDefined = false;
+    private TokenInformation tokenDef = null;
     @Override
     public String toString() {
         return "FireBrigade LADCOP";
@@ -86,48 +94,49 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     					);
 			this.sendMessage(time, channel, meInformation);
 		}
-		// Are we currently filling with water?
-        if (me().isWaterDefined() && me().getWater() < maxWater && location() instanceof Refuge) {
-            Logger.info("Filling with water at " + location());
-            sendRest(time);
-            return;
-        }
-        // Are we out of water?
-        if (me().isWaterDefined() && me().getWater() == 0) {
-            // Head for a refuge
-        	List<EntityID> closestPath = new ArrayList<EntityID>();
-        	for(EntityID refuge : refugeIDs)
-        	{
-        		List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
-        		if(closestPath.isEmpty())
-        		{
-        			closestPath = path;
-        		}else{
-        			if(path.size() < closestPath.size())
-        			{
-        				closestPath = path;
-        			}
-        		}
-        	}
-            //List<EntityID> path = search.breadthFirstSearch(me().getPosition(), refugeIDs);
-            if (closestPath != null) {
-                Logger.info("Moving to refuge");
-                sendMove(time, closestPath);
-                return;
-            }
-            else {
-                Logger.debug("Couldn't plan a path to a refuge.");
-                closestPath = randomWalk();
-                Logger.info("Moving randomly");
-                sendMove(time, closestPath);
-                return;
-            }
-        }
+		
 		
     	//recebendo mensagens
     	this.heardMessage(heard);
     	this.getReceivedMessage().addAll(this.getFireJob());
-    	for(Object msg: this.getReceivedMessage())
+    	
+    	// Are we currently filling with water?
+        if (me().isWaterDefined() && me().getWater() < maxWater && location() instanceof Refuge) {
+            Logger.info("Filling with water at " + location());
+            sendRest(time);
+            pathDefined = false;
+            return;
+        }
+        
+        // Are we out of water?
+        if (me().isWaterDefined() && me().getWater() == 0) {
+            // Head for a refuge
+        	if(pathDefined == false)
+        	{
+        		List<EntityID> closestPath = new ArrayList<EntityID>();
+        		for(EntityID refuge : refugeIDs)
+        		{
+        			List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+        			if(closestPath.isEmpty())
+        			{
+        				closestPath = path;
+        			}else{
+        				if(path.size() < closestPath.size())
+        				{
+        					closestPath = path;
+        				}
+        			}
+        		}
+        		currentPath = closestPath;
+        		pathDefined = true;
+        	}else{
+        		currentPath = walk(currentPath);
+        		sendMove(time, currentPath);
+        		return;
+        	}
+        }
+        
+        for(Object msg: this.getReceivedMessage())
     	{
     	   	if(msg instanceof ColeagueInformation)
     	   	{
@@ -139,8 +148,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   	}
     	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BUILDING_FIRE)
     	   	{
-    	   		TokenInformation token = (TokenInformation)msg;    	   		
-    	   		System.out.println("Token Recebido "+token.getId()+" eu sou "+me().getID().getValue()+" limiar "+token.getThreshold());
+    	   		TokenInformation token = (TokenInformation)msg;
     	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
     	   		
     	   		/*
@@ -213,10 +221,11 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	   		}
     	   			
     	   		}else{
+    	   			
     	   			this.sendMessage(time, channel, token);
     	   		}
     			
-    	   	}else if(msg instanceof LockInformation){
+    	   	}else if(msg instanceof LockInformation && ((LockInformation)msg).getToken().getValueType() == MessageType.BUILDING_FIRE ){
     	   		TokenInformation token = ((LockInformation)msg).getToken();
     	   		if(this.getPotentialValue().contains(token)==true){
     	   			this.getPotentialValue().remove(token);
@@ -249,7 +258,9 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   		TokenInformation tokenTmp = new TokenInformation(r.getValue(), true, MessageType.BUILDING_FIRE);
     	   		tokenTmp.setThreshold(THRESHOLD);
     	   		tokenTmp.setOwner(r.getSender());
-    	   		Integer tmpSize = this.getDijkstraPath(new EntityID(r.getSender()), new EntityID(tokenTmp.getAssociatedValue())).size();
+    	   		StandardEntity s = model.getEntity(new EntityID(r.getSender()));
+    	   		Human h = (Human)s; 	   		
+    	   		Integer tmpSize = this.getDijkstraPath(h.getPosition(), new EntityID(tokenTmp.getAssociatedValue())).size();
 	   				
     	   		if(potentialTmp.contains(r.getValue())  ){
     	   			
@@ -280,38 +291,44 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   }
     	   	
    	    }
-    	ArrayList<TokenInformation> removeList = new ArrayList<TokenInformation>();
-    	for(TokenInformation t : this.getValue())
-    	{
-    		//System.out.println("Lista de values "+this.getValue());
-    		Building b = (Building)model.getEntity(new EntityID(t.getAssociatedValue()));
+    	if(this.getValue().isEmpty() == false && this.tokenDef == null && pathDefined == false && me().getWater() > 0){
+    		int index = new Random().nextInt(this.getValue().size());
+    		TokenInformation t = this.getValue().get(index);
+    		tokenDef = t;
     		
-    		if(b.isOnFire()){
-    			this.extinguishFire(time, new EntityID(t.getAssociatedValue()));
+    		currentPath = this.getDijkstraPath(me().getPosition(), new EntityID(t.getAssociatedValue()));
+    		System.out.println("path to task "+currentPath);
+    		pathDefined = true;
+    	}else if(this.getValue().isEmpty() == false && this.tokenDef != null && me().getWater() > 0){
+    		
+    		Collection<StandardEntity> targets = model.getObjectsInRange(new EntityID(tokenDef.getAssociatedValue()), this.maxDistance);
+    		if(objectsToIDs(targets).contains(me().getPosition())){
+    			System.out.println("Extinguish fire at "+tokenDef.getAssociatedValue());
+    			sendExtinguish(time, new EntityID(tokenDef.getAssociatedValue()), this.maxWater);
+    			if(me().getWater() == 0)
+    			{
+    				pathDefined = false;
+    			}
+    			Building b = (Building)model.getEntity(new EntityID(tokenDef.getAssociatedValue()));
+    			if(b.isOnFire() == false)
+    			{
+    				System.out.println("fire off ");
+    				this.getValue().remove(tokenDef);
+    				tokenDef = null;
+    			}
     		}else{
-    			removeList.add(t);
+    			currentPath = this.walk(currentPath);
+    			System.out.println("Bombeiro "+me().getID()+" estou em "+me().getPosition()+" caminho para incendio "+currentPath);
+            	sendMove(time, currentPath);
     		}
     	}
-    	for(TokenInformation t : removeList)
-    	{
-    		Building b = (Building)model.getEntity(new EntityID(t.getAssociatedValue()));
-    		this.getBuildingDetected().remove(b);
-    	}
-    	this.getValue().removeAll(removeList);
-    	
-    	if(this.getValue().isEmpty()){
-    	
-    		/**
-         	* If any of previous plans do not work
-         	* agent moves randomly
-         	*/
-    		List<EntityID> path = null;
-        	Logger.debug("Não é possível planejar um caminho até o incêndio.");
-        	path = randomWalk();
-        	Logger.info("Movendo-se aleatoriamente.");
-        	//	System.out.println("Movendo aleatoriamente.");
-        	sendMove(time, path);
-    	}
+        if(tokenDef == null && this.getValue().isEmpty()){
+        	Logger.debug("Couldn't plan a path to a refuge.");
+        	currentPath = this.walk(currentPath);
+        	Logger.info("Moving randomly");
+        	sendMove(time, currentPath);
+        	return;
+        }
 		
 	}
 	
@@ -338,22 +355,26 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		ArrayList<TokenInformation> out = new ArrayList<TokenInformation>();
 		ArrayList<TokenInformation> in = new ArrayList<TokenInformation>();
 		Double resTot = 0.0;
-		Collections.sort(this.getValue(), new ValueSorter());
-		System.out.println("values sorteados "+this.getValue());
-		for(TokenInformation t : this.getValue()){
-			Building b = (Building)model.getEntity(new EntityID(t.getAssociatedValue()));
-    		Double spentResource = this.spentResource(b);
-			if((resTot + spentResource) >= this.myWaterQuantity())
-			{
-				out.add(t);
+		if(this.getValue().isEmpty() == false){
+			Collections.sort(this.getValue(), new ValueSorter());
+			System.out.println("values sorteados "+this.getValue());
+			Iterator values = this.getValue().iterator();
+			while(values.hasNext()){
+				TokenInformation next = (TokenInformation)values.next();
+				Building b = (Building)model.getEntity(new EntityID(next.getAssociatedValue()));
+				Double spentResource = this.spentResource(b);
+				if((resTot + spentResource) >= this.myWaterQuantity())
+				{
+					out.add(next);
+				}
+				else
+				{
+					in.add(next);
+					resTot = resTot + spentResource;
+				}
+				this.getValue().clear();
+				this.setValue(in);
 			}
-			else
-			{
-				in.add(t);
-				resTot = resTot + spentResource;
-			}
-			this.getValue().clear();
-			this.setValue(in);
 		}
 		return out;
 	}
@@ -404,25 +425,24 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 
 	public void extinguishFire(int timestep, EntityID building)
 	{
-    	if((model.getDistance(me().getID(), building) <= this.maxDistance) || me().getPosition() != building)
-    	{
     		Logger.info("Apagando Incêndio " + building);
     		sendExtinguish(timestep, building, this.maxPower);
             return;
-    	}
-    	else
-    	{
-    		List<EntityID> path = planPathToTask(me().getPosition() ,building, this.maxDistance);
-            //if path is not null
-            if (path != null) {
-                Logger.info("Movendo-se para um alvo.");
-                //sends Move command to a path (list of EntityIDs) at specified time
-                sendMove(timestep, path);
-                return;
-            }
-    		
-    	}
     }
+	
+	public void moveTo(int timestep, EntityID location)
+	{
+		List<EntityID> path = planPathToTask(me().getPosition() ,location, this.maxDistance);
+		System.out.println("caminho "+path);
+        //if path is not null
+        if (path != null) {
+            Logger.info("Movendo-se para um alvo.");
+            //sends Move command to a path (list of EntityIDs) at specified time
+            sendMove(timestep, path);
+            return;
+        }
+		
+	}
 
 	public ArrayList<Building> getBuildingDetected() {
 		return buildingDetected;

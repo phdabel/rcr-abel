@@ -5,10 +5,9 @@ import static rescuecore2.misc.Handy.objectsToIDs;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.Map;
 
@@ -29,7 +28,6 @@ import message.TokenInformation;
 import rescuecore2.Constants;
 import rescuecore2.log.Logger;
 import rescuecore2.messages.Command;
-import rescuecore2.misc.geometry.GeometryTools2D;
 
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.standard.components.StandardAgent;
@@ -39,10 +37,9 @@ import rescuecore2.standard.kernel.comms.StandardCommunicationModel;
 import rescuecore2.standard.messages.AKSpeak;
 import rescuecore2.standard.entities.Area;
 import rescuecore2.standard.entities.Building;
-import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Refuge;
 import rescuecore2.standard.entities.Road;
-
+import rescuecore2.standard.entities.StandardEntityURN;
 
 import sample.SampleSearch;
 /**
@@ -157,43 +154,38 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     
     /**
     Construct a random walk starting from this agent's current location to a random building.
+     * @param fireBrigade 
     @return A random walk.
      */
-    protected List<EntityID> randomWalk() {
-    	//creates a array list of Entity as larger as RANDOM_WALK_LENGTH value
-    	List<EntityID> result = new ArrayList<EntityID>(RANDOM_WALK_LENGTH);
-    	//array list of Entities which was visited
-    	Set<EntityID> seen = new HashSet<EntityID>();
-    	//current position (EntityID) of the agent
-    	EntityID current = ((Human)me()).getPosition();
-    	for (int i = 0; i < RANDOM_WALK_LENGTH; ++i) {
-    		//add the current position to result and seen array list
-    		result.add(current);
-    		seen.add(current);
-    		//any EntityID from the current position of agent
-    		List<EntityID> possible = new ArrayList<EntityID>(neighbours.get(current));
-    		//shuffle Entities ID's order in possible array list
-    		Collections.shuffle(possible, random);
-    		boolean found = false;
-    		//tries to get some possible EntityID
-    		for (EntityID next : possible) {
-    			//if the EntityID was seen then keep searching
-    			if (seen.contains(next)) {
-    				continue;
-    			}
-    			//otherwise
-    			// breaks the loop and return result array list
-    			current = next;
-    			found = true;
-    			break;
+    protected List<EntityID> walk(List<EntityID> path) {
+    	
+    	if(path.isEmpty() || path.size() <= 2){
+    		
+    		Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.ROAD);
+    		List<Road> road = new ArrayList<Road>();
+    		for (StandardEntity next : e)
+    		{
+    			Road r = (Road)next;
+    			road.add(r);
     		}
-    		//if found is false, it means that there's no possible EntityID
-    		//and we reached a dead-end.
-    		if (!found) {
-    			break;
-    		}
+    		Integer index = new Random().nextInt(road.size());
+    		
+    		EntityID destiny = road.get(index).getID();
+    		path = this.getDijkstraPath(location().getID(), destiny);
+    	}else{
+    		path = this.getDijkstraPath(location().getID(), path.get((path.size() - 1)));
+    		
     	}
-    	return result;
+    	return path;
+    }
+    
+    protected Double euclidianDistance(int x, int x0, int y, int y0)
+    {
+    	Double norma = 0.0;
+    	norma = (double) (((x - x0)^2)+(y - y0)^2);
+    	Double result = Math.sqrt(norma);
+		return result;
+    	
     }
     
     protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> worldGraph()
@@ -204,17 +196,18 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		if(next instanceof Road)
     		{
     			Road b = (Road)next;
-    			Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
-    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() >= 1)){
+    			//Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
+    			
+    			if(g.containsVertex(b.getID()) == false){
     				g.addVertex(b.getID());
     				List<EntityID> neighbours = b.getNeighbours();
     				for(EntityID n : neighbours)
     				{
     					if(g.containsVertex(n)){
     						Area tmp = (Area)model.getEntity(n);
-    						Double sizeTmp = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(tmp.getApexList()));
+    						Double size = this.euclidianDistance(b.getX(), tmp.getX(), b.getY(), tmp.getY());
     						g.addEdge(n, b.getID());
-    						g.setEdgeWeight(g.getEdge(n, b.getID()), (sizeTmp * size));
+    						g.setEdgeWeight(g.getEdge(n, b.getID()), size);
     					}
     				}
     			}
@@ -223,17 +216,17 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		{
     			Building b = (Building)next;
     			buildingIDs.add(b.getID());
-    			Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
-    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() >= 1)){
+    			
+    			if(g.containsVertex(b.getID()) == false){
     				g.addVertex(b.getID());
     				List<EntityID> neighbours = b.getNeighbours();
     				for(EntityID n : neighbours)
     				{
     					if(g.containsVertex(n)){
     						Area tmp = (Area)model.getEntity(n);
-    						Double sizeTmp = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(tmp.getApexList()));
+    						Double size = this.euclidianDistance(b.getX(), tmp.getX(), b.getY(), tmp.getY());
     						g.addEdge(n, b.getID());
-    						g.setEdgeWeight(g.getEdge(n, b.getID()), (sizeTmp * size));
+    						g.setEdgeWeight(g.getEdge(n, b.getID()), size);
     					}
     				}
     			}
@@ -242,17 +235,16 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		{
     			Refuge b = (Refuge)next;
     			refugeIDs.add(b.getID());
-    			Double size = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(b.getApexList()));
-    			if(g.containsVertex(b.getID()) == false && (b.getNeighbours().size() >= 1)){
+    			if(g.containsVertex(b.getID()) == false){
     				g.addVertex(b.getID());
     				List<EntityID> neighbours = b.getNeighbours();
     				for(EntityID n : neighbours)
     				{
     					if(g.containsVertex(n)){
     						Area tmp = (Area)model.getEntity(n);
-    						Double sizeTmp = GeometryTools2D.computeArea(GeometryTools2D.vertexArrayToPoints(tmp.getApexList()));
+    						Double size = this.euclidianDistance(b.getX(), tmp.getX(), b.getY(), tmp.getY());
     						g.addEdge(n, b.getID());
-    						g.setEdgeWeight(g.getEdge(n, b.getID()), (sizeTmp * size));
+    						g.setEdgeWeight(g.getEdge(n, b.getID()), size);
     					}
     				}
     			}
