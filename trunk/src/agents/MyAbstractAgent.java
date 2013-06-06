@@ -159,7 +159,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
      */
     protected List<EntityID> walk(List<EntityID> path) {
     	
-    	if(path.isEmpty() || path.size() <= 2){
+    	if(path.isEmpty()){
     		
     		Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.ROAD);
     		List<Road> road = new ArrayList<Road>();
