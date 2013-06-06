@@ -5,7 +5,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.Random;
 
 import message.Channel;
@@ -21,13 +23,11 @@ import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.FireBrigade;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Refuge;
-import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.worldmodel.EntityID;
 import sample.DistanceSorter;
-import worldmodel.jobs.Token;
 import static rescuecore2.misc.Handy.objectsToIDs;
 
 
@@ -46,7 +46,8 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     private int maxPower;
     
     private ArrayList<Building> buildingDetected = new ArrayList<Building>();
-    private ArrayList<Integer> potentialTmp = new ArrayList<Integer>();
+    //private ArrayList<Integer> potentialTmp = new ArrayList<Integer>();
+    private Queue<AgentState> stateQueue = new LinkedList<AgentState>();
     private List<EntityID> currentPath = new ArrayList<EntityID>();
     private Boolean pathDefined = false;
     private TokenInformation tokenDef = null;
@@ -100,42 +101,9 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	this.heardMessage(heard);
     	this.getReceivedMessage().addAll(this.getFireJob());
     	
-    	// Are we currently filling with water?
-        if (me().isWaterDefined() && me().getWater() < maxWater && location() instanceof Refuge) {
-            Logger.info("Filling with water at " + location());
-            sendRest(time);
-            pathDefined = false;
-            return;
-        }
-        
-        // Are we out of water?
-        if (me().isWaterDefined() && me().getWater() == 0) {
-            // Head for a refuge
-        	if(pathDefined == false)
-        	{
-        		List<EntityID> closestPath = new ArrayList<EntityID>();
-        		for(EntityID refuge : refugeIDs)
-        		{
-        			List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
-        			if(closestPath.isEmpty())
-        			{
-        				closestPath = path;
-        			}else{
-        				if(path.size() < closestPath.size())
-        				{
-        					closestPath = path;
-        				}
-        			}
-        		}
-        		currentPath = closestPath;
-        		pathDefined = true;
-        	}else{
-        		currentPath = walk(currentPath);
-        		sendMove(time, currentPath);
-        		return;
-        	}
-        }
-        
+        /**
+         * PLANEJAMENTO
+         */
         for(Object msg: this.getReceivedMessage())
     	{
     	   	if(msg instanceof ColeagueInformation)
@@ -146,189 +114,126 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   			this.getColeagues().add((Integer)tmpColeague.getId());
     	   		}
     	   	}
-    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BUILDING_FIRE)
+    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.BUILDING_FIRE )
     	   	{
-    	   		TokenInformation token = (TokenInformation)msg;
-    	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
-    	   		
-    	   		/*
-    	   		Collection<StandardEntity> otherTargets = this.tasksInRange(target.getID());
-	        	for(StandardEntity oT : otherTargets)
-	        	{
-	        		if(oT.getStandardURN() == StandardEntityURN.ROAD)
-	        		{
-	        			Road r = (Road)oT;
-	                	if (r.isBlockadesDefined() && !r.getBlockades().isEmpty() && this.getOtherJobs().contains(r.getID()) == false ) {
-	                		this.getOtherJobs().add(r.getID());
-	                		TokenInformation job = new TokenInformation(r.getID().getValue(), true, MessageType.BLOCKADE);
-	                    	this.sendMessage(time, channel, job);
-	                	}
-	        		}
-	        	}*/
-    	   		
-    	   		//se limiar é menor que a capacidade do agente
-    	   		Double capability = 0.0;
-    	   		capability = this.computeCapability(target.getID());
-    	   		if(token.getThreshold() < capability)
-    	   		{
-    	   			token.setCapability(capability);
-    	   			//AND MONITOR
-    	   			if(token.getPotential() && token.getOwner() == 0)
-    	   			{
-    	   				token.setOwner(me().getID().getValue());
-    	   				if(potentialTmp.contains(token) == false)
-    	   				{
-    	   					this.potentialTmp.add(token.getAssociatedValue());
-    	   				}
-    	   				this.sendMessage(time, channel, token);
-    	   				
-    	   				
-    	   			}
-    	   			//TOKEN RECEIVED BY OTHER AGENT
-    	   			else if(token.getPotential() && token.getOwner() != 0 && token.getOwner() != me().getID().getValue()){
-    	   				token.setOwner(me().getID().getValue());
-    	   				this.getPotentialValue().add(token);
-    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue(),me().getID().getValue());
-    	   				this.sendMessage(time,  channel, retained);
-    	   			}else{
-    	   				this.getValue().add(token);
-    	   			}
-    	   			//se os recursos necessarios nao extrapolam os limites do agente
-        	   		//calcula recursos necessarios
-        	   		Double sumSpentResource = 0.0;
-        	   			
-        	   		for(TokenInformation ttmp : this.getValue())
-        	   		{
-                		Building b = (Building)model.getEntity(new EntityID(ttmp.getAssociatedValue()));
-                		sumSpentResource += this.spentResource(b);
-                		//System.out.println("Gasto de recurso para "+b.getID().getValue()+" - "+this.spentResource(b));
-        	   		}
-        	   		if(sumSpentResource > this.myWaterQuantity())
-        	   		{
-        	   			
-        	   			ArrayList<TokenInformation> out = maxCap();
-        	   			for(TokenInformation t : out)
-        	   			{
-        	   				if(t.getPotential() == true)
-        	   				{
-        	   					t.setOwner(me().getID().getValue());
-        	   					ReleaseInformation release = new ReleaseInformation(t);
-        	   					this.sendMessage(time, channel, release);
-        	   				}else{
-        	   					this.sendMessage(time, channel, token);
-        	   				}
-        	   			}
-        	   		}
-    	   			
-    	   		}else{
-    	   			
-    	   			this.sendMessage(time, channel, token);
-    	   		}
-    			
-    	   	}else if(msg instanceof LockInformation && ((LockInformation)msg).getToken().getValueType() == MessageType.BUILDING_FIRE ){
-    	   		TokenInformation token = ((LockInformation)msg).getToken();
-    	   		if(this.getPotentialValue().contains(token)==true){
-    	   			this.getPotentialValue().remove(token);
-    	   			this.getValue().add(token);
-    	   		}else{
-    	   			TokenInformation t = ((LockInformation)msg).getToken();
-    	   			t.setOwner(me().getID().getValue());
-    	   			ReleaseInformation r = new ReleaseInformation(t);
-    	   			this.sendMessage(time, channel, r);
-    	   		}
-    	   	
-    	   	}else if(msg instanceof ReleaseInformation){
-    	   		ReleaseInformation r = (ReleaseInformation)msg;
-    	   		if(r.getToken().getOwner() == me().getID().getValue())
-    	   		{
-    	   			this.getPotentialValue().remove(r.getToken());
-    	   		}
-    	   		
-    	   	}else if(msg instanceof RetainedInformation && potentialTmp.contains(((RetainedInformation)msg).getValue()) ){
-    	   		this.getRetained().add((RetainedInformation)msg);
-    	   	}else if(msg instanceof ReleaseInformation && potentialTmp.contains(((RetainedInformation)msg).getValue()) ){
-    	   		this.getRetained().remove((RetainedInformation)msg);
+    	   		TokenInformation t = (TokenInformation)msg;
+    	   		this.getValue().add(t);
     	   	}
-    	   	//definir grupo para trabalho conjunto
-    	   	ArrayList<LockInformation> lockers = new ArrayList<LockInformation>();
-    	   	ArrayList<ReleaseInformation> releasers = new ArrayList<ReleaseInformation>();
     	   	
-    	   for(RetainedInformation r : this.getRetained())
-    	   {
-    	   		TokenInformation tokenTmp = new TokenInformation(r.getValue(), true, MessageType.BUILDING_FIRE);
-    	   		tokenTmp.setThreshold(THRESHOLD);
-    	   		tokenTmp.setOwner(r.getSender());
-    	   		StandardEntity s = model.getEntity(new EntityID(r.getSender()));
-    	   		Human h = (Human)s; 	   		
-    	   		Integer tmpSize = this.getDijkstraPath(h.getPosition(), new EntityID(tokenTmp.getAssociatedValue())).size();
-	   				
-    	   		if(potentialTmp.contains(r.getValue())  ){
-    	   			
-    	   			for(LockInformation l : lockers)
-    	   			{
-    	   				if(l.getToken().getAssociatedValue() == r.getValue())
-	   					{
-    	   					Integer lSize = this.getDijkstraPath(new EntityID(l.getToken().getOwner()), new EntityID(l.getToken().getId())).size(); 
-    	   					if(tmpSize < lSize)
-    	   					{
-    	   						lockers.remove(l);
-    	   						lockers.add(new LockInformation(tokenTmp));
-    	   						releasers.add(new ReleaseInformation(l.getToken()));
-    	   					}else{
-    	   						releasers.add(new ReleaseInformation(tokenTmp));
-    	   					}
-	   					}
-    	   			}
-    	   		}
-    	   }
-    	   for(LockInformation l : lockers)
-    	   {
-    		   this.sendMessage(time, channel, l);
-    	   }
-    	   for(ReleaseInformation r: releasers)
-    	   {
-    		   this.sendMessage(time, channel, r);
-    	   }
-    	   	
-   	    }
-    	if(this.getValue().isEmpty() == false && this.tokenDef == null && pathDefined == false && me().getWater() > 0){
-    		int index = new Random().nextInt(this.getValue().size());
-    		TokenInformation t = this.getValue().get(index);
-    		tokenDef = t;
-    		
-    		currentPath = this.getDijkstraPath(me().getPosition(), new EntityID(t.getAssociatedValue()));
-    		System.out.println("path to task "+currentPath);
-    		pathDefined = true;
-    	}else if(this.getValue().isEmpty() == false && this.tokenDef != null && me().getWater() > 0){
-    		
-    		Collection<StandardEntity> targets = model.getObjectsInRange(new EntityID(tokenDef.getAssociatedValue()), this.maxDistance);
-    		if(objectsToIDs(targets).contains(me().getPosition())){
-    			System.out.println("Extinguish fire at "+tokenDef.getAssociatedValue());
-    			sendExtinguish(time, new EntityID(tokenDef.getAssociatedValue()), this.maxWater);
-    			if(me().getWater() == 0)
-    			{
-    				pathDefined = false;
-    			}
-    			Building b = (Building)model.getEntity(new EntityID(tokenDef.getAssociatedValue()));
-    			if(b.isOnFire() == false)
-    			{
-    				System.out.println("fire off ");
-    				this.getValue().remove(tokenDef);
-    				tokenDef = null;
-    			}
-    		}else{
-    			currentPath = this.walk(currentPath);
-    			System.out.println("Bombeiro "+me().getID()+" estou em "+me().getPosition()+" caminho para incendio "+currentPath);
-            	sendMove(time, currentPath);
-    		}
     	}
-        if(tokenDef == null && this.getValue().isEmpty()){
-        	Logger.debug("Couldn't plan a path to a refuge.");
-        	currentPath = this.walk(currentPath);
-        	Logger.info("Moving randomly");
-        	sendMove(time, currentPath);
-        	return;
+        /**
+         * INSERÇÃO DE VALORES NA FILA
+         */
+        if(!this.getValue().isEmpty() && this.stateQueue.isEmpty())
+        {
+        	TokenInformation tmp = this.getValue().get(0);
+        	EntityID tmpID = new EntityID(tmp.getAssociatedValue());
+        	this.getValue().remove(0);
+        	if(me().isWaterDefined() && me().getWater() == 0)
+        	{
+        		Queue<AgentState> tmpQueue = stateQueue;
+        		stateQueue.clear();
+        		stateQueue.add(new AgentState("GetWater"));
+        		stateQueue.addAll(tmpQueue);
+        	}
+        	if(model.getDistance(getID(), tmpID) <= maxDistance)
+        	{
+        		stateQueue.add(new AgentState("Walk", tmpID));
+        		stateQueue.add(new AgentState("Extinguish", tmpID));
+        	}else{
+        		stateQueue.add(new AgentState("Extinguish", tmpID));
+        	}
+        		
+        }else if (this.stateQueue.isEmpty()){
+        	stateQueue.add(new AgentState("RandomWalk"));
         }
+        
+        /**
+         * AÇÃO e CONTROLE
+         * Máquina de Estados
+         * Aqui começa a execução das ações na pilha de ações
+         */
+        if(!stateQueue.isEmpty())
+        {
+        	AgentState currentAction = stateQueue.peek();
+        	
+        	switch(currentAction.getState())
+        	{
+        		case "RandomWalk":
+        			System.out.println("Random Walk da pilha de estados.");
+        			if(currentPath.isEmpty())
+        			{
+        				currentPath = this.walk(currentPath);
+        				sendMove(time, currentPath);
+        				return;
+        			}else if(currentPath.size() <= 2){
+        				stateQueue.poll();
+        				sendMove(time, currentPath);
+        				return;
+        			}else{
+        				currentPath = this.walk(currentPath);
+        				sendMove(time, currentPath);
+        			}
+        			break;
+        		case "Walk":
+        			System.out.println("Walk da pilha de estados");
+        			if(currentPath.isEmpty() && pathDefined == false){
+        				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
+        				pathDefined = true;
+        				currentPath = this.walk(currentPath);
+        				sendMove(time, currentPath);
+        				return;
+        			}else if(currentPath.size() >2 && pathDefined == true)
+        			{
+        				currentPath = this.walk(currentPath);
+        				sendMove(time, currentPath);
+        				return;
+        			}else if(currentPath.size() <= 2){
+        				stateQueue.poll();
+        				sendMove(time,currentPath);
+        				pathDefined = false;
+        				return;
+        			}
+        			break;
+        		case "GetWater":
+        			System.out.println("GetWater da pilha de estados");
+        			if(me().getWater() == this.maxWater)
+        			{
+        				stateQueue.poll();
+        			}else{
+        				getWater(time);
+        			}
+        			break;
+        		case "Extinguish":
+        			System.out.println("Extinguish da pilha de estados");
+        			Building b = (Building)model.getEntity(currentAction.getId());
+        			if(me().getWater() == 0)
+        			{
+        				Queue<AgentState> tmpQueue = stateQueue;
+                		stateQueue.clear();
+                		stateQueue.add(new AgentState("GetWater"));
+                		stateQueue.addAll(tmpQueue);        				
+        			}else if((model.getDistance(getID(), currentAction.getId()) <= maxDistance) ||
+        					me().getPosition() == currentAction.getId())
+        			{
+        				EntityID s = this.somethingNextToFire(currentAction.getId());
+        				Queue<AgentState> tmpQueue = stateQueue;
+                		stateQueue.clear();
+                		stateQueue.add(new AgentState("Walk", s));
+                		stateQueue.addAll(tmpQueue);
+        			}else if(b.isOnFire())
+        			{
+        				sendExtinguish(time, b.getID(), this.maxPower);
+        			}else if(!b.isOnFire())
+        			{
+        				stateQueue.poll();
+        			}
+        			break;
+        	}
+        }
+        /**
+         * fim da máquina de estados
+         */
 		
 	}
 	
@@ -358,7 +263,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		if(this.getValue().isEmpty() == false){
 			Collections.sort(this.getValue(), new ValueSorter());
 			System.out.println("values sorteados "+this.getValue());
-			Iterator values = this.getValue().iterator();
+			Iterator<TokenInformation> values = this.getValue().iterator();
 			while(values.hasNext()){
 				TokenInformation next = (TokenInformation)values.next();
 				Building b = (Building)model.getEntity(new EntityID(next.getAssociatedValue()));
@@ -380,8 +285,10 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 	}
 	
 	/**
-	 * local function that returns a Collection of Burning Building
+	 * Action
+	 * Ação local do agente, recolhe todos os fireJob próximos e manda para a lista de mensagens.
 	 * 
+	 * @return
 	 */
 	private ArrayList<TokenInformation> getFireJob()
 	{
@@ -423,6 +330,13 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		return buildingFire;
 	}
 
+	/**
+	 * Action
+	 * 
+	 * Essa ação será utilizada para extinguir as chamas de um prédio.
+	 * @param timestep
+	 * @param building - EntityID do prédio que está em chamas
+	 */
 	public void extinguishFire(int timestep, EntityID building)
 	{
     		Logger.info("Apagando Incêndio " + building);
@@ -430,18 +344,80 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
             return;
     }
 	
-	public void moveTo(int timestep, EntityID location)
-	{
-		List<EntityID> path = planPathToTask(me().getPosition() ,location, this.maxDistance);
-		System.out.println("caminho "+path);
-        //if path is not null
-        if (path != null) {
-            Logger.info("Movendo-se para um alvo.");
-            //sends Move command to a path (list of EntityIDs) at specified time
-            sendMove(timestep, path);
+	/**
+	 * Ação
+	 * 
+	 * Planeja um caminho para uma região próxima a um incendio
+	 * @param target
+	 * @return
+	 */
+	public EntityID somethingNextToFire(EntityID target){
+		
+		Collection<StandardEntity> targets = model.getObjectsInRange(target, maxDistance);
+		List<EntityID> closestPath = new ArrayList<EntityID>();
+		EntityID result = null;
+		for(StandardEntity next : targets)
+		{
+			List<EntityID> path = this.getDijkstraPath(me().getPosition(), next.getID());
+			if(closestPath.isEmpty())
+			{
+				closestPath = path;
+				result = next.getID();
+			}else{
+				if(path.size() < closestPath.size())
+				{
+					closestPath = path;
+					result = next.getID();
+				}
+			}
+		}
+		return result;
+	}
+	
+	/**
+	 * Action
+	 * 
+	 * Essa ação será utilizada para levar o agente até o refúgio para reabastecer ou então reabastecer se o agente já
+	 * está no refúgio.
+	 * @param timestep 
+	 */
+	public void getWater(int timestep){
+		// Are we currently filling with water?
+        if (me().isWaterDefined() && me().getWater() < maxWater && location() instanceof Refuge) {
+            Logger.info("Filling with water at " + location());
+            sendRest(timestep);
+            currentPath.clear();
+            pathDefined = false;
             return;
         }
-		
+        
+        // Are we out of water?
+        if (me().isWaterDefined() && me().getWater() == 0) {
+            // Head for a refuge
+        	if(pathDefined == false)
+        	{
+        		List<EntityID> closestPath = new ArrayList<EntityID>();
+        		for(EntityID refuge : refugeIDs)
+        		{
+        			List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+        			if(closestPath.isEmpty())
+        			{
+        				closestPath = path;
+        			}else{
+        				if(path.size() < closestPath.size())
+        				{
+        					closestPath = path;
+        				}
+        			}
+        		}
+        		currentPath = closestPath;
+        		pathDefined = true;
+        	}else{
+        		currentPath = walk(currentPath);
+        		sendMove(timestep, currentPath);
+        		return;
+        	}
+        }
 	}
 
 	public ArrayList<Building> getBuildingDetected() {
