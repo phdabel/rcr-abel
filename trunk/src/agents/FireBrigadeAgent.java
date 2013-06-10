@@ -50,6 +50,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     //private ArrayList<Integer> potentialTmp = new ArrayList<Integer>();
     private Queue<AgentState> stateQueue = new LinkedList<AgentState>();
     private List<EntityID> currentPath = new ArrayList<EntityID>();
+    private List<EntityID> lastPath = new ArrayList<EntityID>();
     private Boolean pathDefined = false;
     private TokenInformation tokenDef = null;
     @Override
@@ -142,9 +143,10 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	{
         		stateQueue.poll();
         	}
-        	TokenInformation tmp = this.getValue().get(0);
+        	TokenInformation tmp = this.getValue().get(this.getValue().size() - 1);
         	EntityID tmpID = new EntityID(tmp.getAssociatedValue());
-        	this.getValue().remove(0);
+        	this.getValue().remove(this.getValue().size() - 1);
+        	
         	if(me().isWaterDefined() && me().getWater() == 0)
         	{
         		Queue<AgentState> tmpQueue = stateQueue;
@@ -177,20 +179,25 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	switch(currentAction.getState())
         	{
         		case "RandomWalk":
+        			System.out.println(currentPath);
         			//System.out.println("Random Walk da pilha de estados.");
         			if(currentPath.isEmpty() && pathDefined == false)
         			{
         				currentPath = this.walk(currentPath);
         				pathDefined = true;
+        				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
         				sendMove(time, currentPath);
         				return;
         			}else if(currentPath.size() <= 2){
         				stateQueue.poll();
         				pathDefined = false;
+        				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
         				sendMove(time, currentPath);
+        				currentPath.clear();
         				return;
-        			}else{
+        			}else if(pathDefined == true){
         				currentPath = this.walk(currentPath);
+        				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
         				sendMove(time, currentPath);
         			}
         			break;
@@ -200,12 +207,28 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         			if(currentPath.isEmpty() && pathDefined == false){
         				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
         				pathDefined = true;
+        				lastPath = currentPath;
         				currentPath = this.walk(currentPath);
+        				System.out.println("Last Path "+lastPath);
+        				System.out.println("Current Path "+currentPath);
+        				System.out.println(lastPath.size() == currentPath.size());
+        				if(lastPath.size() == currentPath.size())
+        				{
+        					this.addBeginingQueue(new AgentState("Unblock"));
+        				}
         				sendMove(time, currentPath);
         				return;
         			}else if(currentPath.size() >2 && pathDefined == true)
         			{
+        				lastPath = currentPath;
         				currentPath = this.walk(currentPath);
+        				System.out.println("Last Path "+lastPath);
+        				System.out.println("Current Path "+currentPath);
+        				System.out.println(lastPath.size() == currentPath.size());
+        				if(lastPath.size() == currentPath.size())
+        				{
+        					this.addBeginingQueue(new AgentState("Unblock"));
+        				}
         				sendMove(time, currentPath);
         				return;
         			}else if(currentPath.size() <= 2){
@@ -277,6 +300,15 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         System.out.println("------------------------------------");
         */
 	}
+	
+	protected void addBeginingQueue(AgentState newState)
+    {
+    	Queue<AgentState> tmpQueue = new LinkedList<AgentState>();
+		tmpQueue.addAll(stateQueue);
+		stateQueue.clear();
+		stateQueue.add(newState);
+		stateQueue.addAll(tmpQueue);
+    }
 	
 	protected void printQueue(){
 		int ct = 1;

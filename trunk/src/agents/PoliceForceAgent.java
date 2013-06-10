@@ -123,7 +123,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         	}
         	TokenInformation tmp = this.getValue().get(this.getValue().size() - 1);
         	EntityID tmpID = new EntityID(tmp.getAssociatedValue());
-        	this.getValue().remove(0);
+        	this.getValue().remove(this.getValue().size() - 1);
         	
         	if(me().getPosition() != tmpID)
         	{
