@@ -23,6 +23,7 @@ import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.FireBrigade;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Refuge;
+import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.ChangeSet;
@@ -96,6 +97,13 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 			this.sendMessage(time, channel, meInformation);
 		}
 		
+		StandardEntity pos = (StandardEntity)model.getEntity(me().getPosition());
+		if(pos instanceof Road){
+			if(((Road)pos).isBlockadesDefined()){
+				TokenInformation blockadeToken = new TokenInformation(pos.getID().getValue(), false, MessageType.BLOCKADE);
+				sendMessage(time, channel, blockadeToken);
+			}
+		}
 		
     	//recebendo mensagens
     	this.heardMessage(heard);
@@ -118,14 +126,22 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
     	   	{
     	   		TokenInformation t = (TokenInformation)msg;
     	   		this.getValue().add(t);
+    	   		this.sendMessage(time,  channel, t);
     	   	}
     	   	
     	}
         /**
          * INSERÇÃO DE VALORES NA FILA
          */
-        if(!this.getValue().isEmpty() && this.stateQueue.isEmpty())
+        if((!this.getValue().isEmpty() && this.stateQueue.isEmpty())
+        		||
+        		(!this.getValue().isEmpty() && stateQueue.peek().getState() == "RandomWalk")
+        		)
         {
+        	if(stateQueue.peek().getState() == "RandomWalk")
+        	{
+        		stateQueue.poll();
+        	}
         	TokenInformation tmp = this.getValue().get(0);
         	EntityID tmpID = new EntityID(tmp.getAssociatedValue());
         	this.getValue().remove(0);
@@ -140,6 +156,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	{
         		stateQueue.add(new AgentState("Walk", tmpID));
         		stateQueue.add(new AgentState("Extinguish", tmpID));
+        		this.printQueue();
         	}else{
         		stateQueue.add(new AgentState("Extinguish", tmpID));
         	}
@@ -160,14 +177,16 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         	switch(currentAction.getState())
         	{
         		case "RandomWalk":
-        			System.out.println("Random Walk da pilha de estados.");
-        			if(currentPath.isEmpty())
+        			//System.out.println("Random Walk da pilha de estados.");
+        			if(currentPath.isEmpty() && pathDefined == false)
         			{
         				currentPath = this.walk(currentPath);
+        				pathDefined = true;
         				sendMove(time, currentPath);
         				return;
         			}else if(currentPath.size() <= 2){
         				stateQueue.poll();
+        				pathDefined = false;
         				sendMove(time, currentPath);
         				return;
         			}else{
@@ -176,7 +195,8 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         			}
         			break;
         		case "Walk":
-        			System.out.println("Walk da pilha de estados");
+        			//System.out.println("Walk da pilha de estados");
+        			System.out.println(currentPath);
         			if(currentPath.isEmpty() && pathDefined == false){
         				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
         				pathDefined = true;
@@ -196,7 +216,7 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         			}
         			break;
         		case "GetWater":
-        			System.out.println("GetWater da pilha de estados");
+        			//System.out.println("GetWater da pilha de estados");
         			if(me().getWater() == this.maxWater)
         			{
         				stateQueue.poll();
@@ -205,22 +225,25 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         			}
         			break;
         		case "Extinguish":
-        			System.out.println("Extinguish da pilha de estados");
+        			//System.out.println("Extinguish da pilha de estados");
         			Building b = (Building)model.getEntity(currentAction.getId());
         			if(me().getWater() == 0)
         			{
-        				Queue<AgentState> tmpQueue = stateQueue;
+        				Queue<AgentState> tmpQueue = new LinkedList<AgentState>();
+        				tmpQueue.addAll(stateQueue);
                 		stateQueue.clear();
                 		stateQueue.add(new AgentState("GetWater"));
                 		stateQueue.addAll(tmpQueue);        				
-        			}else if((model.getDistance(getID(), currentAction.getId()) <= maxDistance) ||
+        			}else if((model.getDistance(getID(), currentAction.getId()) > maxDistance) ||
         					me().getPosition() == currentAction.getId())
         			{
         				EntityID s = this.somethingNextToFire(currentAction.getId());
         				Queue<AgentState> tmpQueue = stateQueue;
+        				System.out.println("Fila temp "+tmpQueue);
                 		stateQueue.clear();
                 		stateQueue.add(new AgentState("Walk", s));
                 		stateQueue.addAll(tmpQueue);
+                		System.out.println("Fila apos "+stateQueue);
         			}else if(b.isOnFire())
         			{
         				sendExtinguish(time, b.getID(), this.maxPower);
@@ -234,7 +257,37 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         /**
          * fim da máquina de estados
          */
-		
+        
+        /**
+         * imprime fila de tarefas
+         
+        System.out.println("------------------------------------");
+        System.out.println("TimeStep "+time);
+        System.out.println("Agente Bombeiro "+me().getID().getValue());
+        System.out.println("Posição Atual "+me().getPosition());
+        System.out.println("Lista de values "+this.getValue());
+        System.out.println("Caminho a seguir "+currentPath);
+        int ct = 1;
+        for(AgentState a : this.stateQueue)
+        {
+        	System.out.println("Estado "+ct+" - "+a.getState());
+        	System.out.println("Alvo: "+a.getId());
+        	ct++;
+        }
+        System.out.println("------------------------------------");
+        */
+	}
+	
+	protected void printQueue(){
+		int ct = 1;
+		System.out.println("------------------------------------");
+        for(AgentState a : this.stateQueue)
+        {
+        	System.out.println("Estado "+ct+" - "+a.getState());
+        	System.out.println("Alvo: "+a.getId());
+        	ct++;
+        }
+        System.out.println("------------------------------------");
 	}
 	
 	
@@ -358,16 +411,18 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		EntityID result = null;
 		for(StandardEntity next : targets)
 		{
-			List<EntityID> path = this.getDijkstraPath(me().getPosition(), next.getID());
-			if(closestPath.isEmpty())
-			{
-				closestPath = path;
-				result = next.getID();
-			}else{
-				if(path.size() < closestPath.size())
+			if(next instanceof Road){
+				List<EntityID> path = this.getDijkstraPath(me().getPosition(), next.getID());
+				if(closestPath.isEmpty())
 				{
 					closestPath = path;
 					result = next.getID();
+				}else{
+					if(path.size() < closestPath.size())
+					{
+						closestPath = path;
+						result = next.getID();
+					}
 				}
 			}
 		}
