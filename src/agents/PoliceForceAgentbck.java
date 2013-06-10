@@ -1,11 +1,9 @@
 package agents;
 
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
-import java.util.Queue;
 import java.util.Random;
 
 import message.Channel;
@@ -24,7 +22,6 @@ import rescuecore2.misc.geometry.GeometryTools2D;
 import rescuecore2.misc.geometry.Point2D;
 import rescuecore2.misc.geometry.Line2D;
 
-import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -36,17 +33,16 @@ import rescuecore2.standard.entities.Area;
 /**
    A sample police force agent.
  */
-public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
+public class PoliceForceAgentbck extends MyAbstractAgent<PoliceForce> {
 	
 	private static final int channel = Channel.BROADCAST.ordinal();
     private static final String DISTANCE_KEY = "clear.repair.distance";
     private List<EntityID> currentPath = new ArrayList<EntityID>();
-    private Queue<AgentState> stateQueue = new LinkedList<AgentState>();
-    private List<EntityID> lastPath = new ArrayList<EntityID>();
+    private EntityID lastVertex;
     private int distance;
     private Boolean cleanRefuge = false;
     private TokenInformation tokenDef;
-    private Boolean pathDefined = false;
+    private Boolean pathDefined;
     @Override
     public String toString() {
         return "Sample police force";
@@ -63,15 +59,13 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 
     @Override
     protected void think(int time, ChangeSet changed, Collection<Command> heard) {
-    	
-    	if (time == config.getIntValue(kernel.KernelConstants.IGNORE_AGENT_COMMANDS_KEY)) {
-            sendSubscribe(time, this.getCommunicationChannel());
+        if (time == config.getIntValue(kernel.KernelConstants.IGNORE_AGENT_COMMANDS_KEY)) {
+            // Subscribe to channel 1
+        	sendSubscribe(time, this.getCommunicationChannel());
         }
-		
-		//enviando informação sobre quem sou eu para os colegas
-    	
-		if(time <= 5){
-		
+        
+        if(time <= 5){
+    		
 			ColeagueInformation meInformation =
     			new ColeagueInformation(
     					me().getID().getValue(),
@@ -79,14 +73,10 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     					);
 			this.sendMessage(time, channel, meInformation);
 		}
-		
-		
-    	//recebendo mensagens
-    	this.heardMessage(heard);
-    	
-        /**
-         * PLANEJAMENTO
-         */
+        
+        this.heardMessage(heard);
+        //acrescentar as mensagens, as tasks obtidas pelo proprio agente
+        //this.getReceivedMessage().addAll(this.getFireJob());
         for(Object msg: this.getReceivedMessage())
     	{
     	   	if(msg instanceof ColeagueInformation)
@@ -97,191 +87,140 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	   			this.getColeagues().add((Integer)tmpColeague.getId());
     	   		}
     	   	}
-    	   	if(msg instanceof TokenInformation)
+    	   	if(msg instanceof TokenInformation && ((TokenInformation)msg).getValueType() == MessageType.RESCUE )
     	   	{
-    	   		TokenInformation t = (TokenInformation)msg;
-    	   		if(t.getOwner() == me().getID().getValue()){
-    	   			this.getValue().add(t);
-    	   		}else if(t.getOwner() == 0)
+    	   		TokenInformation token = (TokenInformation)msg;    	   		
+    	   		//System.out.println("Token Recebido "+token.getId()+" eu sou policial "+me().getID().getValue());
+    	   		StandardEntity target = model.getEntity(new EntityID(token.getAssociatedValue()));
+    	   		//se limiar é menor que a capacidade do agente
+    	   		Double capability = 0.0;
+    	   		capability = this.computeCapability(target.getID());   	   		
+    	   		if(token.getThreshold() < capability)
     	   		{
-    	   			this.getValue().add(t);
+    	   			token.setCapability(capability);
+    	   			if(token.getPotential() && token.getOwner() == 0)
+    	   			{
+    	   				token.setOwner(me().getID().getValue());
+    	   				this.getPotentialValue().add(token);
+    	   				RetainedInformation retained = new RetainedInformation(token.getAssociatedValue(), me().getID().getValue());
+    	   				this.sendMessage(time,  channel, retained);
+    	   			}else{
+    	   				this.getValue().add(token);
+    	   			}
+    	   		}else{
+    	   			this.sendMessage(time, channel, token);
     	   		}
-    	   		//this.sendMessage(time,  channel, t);
+    	   	}else if(msg instanceof LockInformation){
+    	   		TokenInformation token = ((LockInformation)msg).getToken();
+    	   		if(this.getPotentialValue().contains(token)==true){
+    	   			this.getPotentialValue().remove(token);
+    	   			this.getValue().add(token);
+    	   		}else{
+    	   			TokenInformation t = ((LockInformation)msg).getToken();
+    	   			t.setOwner(me().getID().getValue());
+    	   			ReleaseInformation r = new ReleaseInformation(t);
+    	   			this.sendMessage(time, channel, r);
+    	   		}
+    	   	
+    	   	}else if(msg instanceof ReleaseInformation){
+    	   		ReleaseInformation r = (ReleaseInformation)msg;
+    	   		if(r.getToken().getOwner() == me().getID().getValue())
+    	   		{
+    	   			this.getPotentialValue().remove(r.getToken());
+    	   		}
+    	   		
     	   	}
     	   	
+    	   	
+    	   	if(this.getValue().isEmpty() == false && this.tokenDef == null && pathDefined == false){
+        		int index = new Random().nextInt(this.getValue().size());
+        		TokenInformation t = this.getValue().get(index);
+        		tokenDef = t;
+        		StandardEntity s = model.getEntity(new EntityID(t.getAssociatedValue()));
+    	   		Human h = (Human)s;
+        		currentPath = this.getDijkstraPath(me().getPosition(), h.getPosition());
+        		System.out.println("caminho ate as vitimas "+currentPath);
+        		pathDefined = true;
+        	}else if(this.getValue().isEmpty() == false && this.tokenDef != null){
+        		currentPath = walk(currentPath);
+        		sendMove(time, currentPath);
+        	}
     	}
-        /**
-         * INSERÇÃO DE VALORES NA FILA
-         */
-        if(		(!this.getValue().isEmpty() && this.stateQueue.isEmpty() ) 
-        		|| 
-        		(!this.getValue().isEmpty() && stateQueue.peek().getState() == "RandomWalk")
-           )
-        {
-        	if(stateQueue.peek().getState() == "RandomWalk"){
-        		stateQueue.remove(stateQueue.peek());
-        	}
-        	TokenInformation tmp = this.getValue().get(this.getValue().size() - 1);
-        	EntityID tmpID = new EntityID(tmp.getAssociatedValue());
-        	this.getValue().remove(0);
+        
+        
+        //Am I near a blockade?
+    	Blockade someTarget = getTargetBlockade();
+    	if (someTarget != null) {
+        	Logger.info("Clearing blockade " + someTarget);
+        	sendClear(time, someTarget.getID());
+        	return;
+    	}
+    	
+        if(cleanRefuge == false){
         	
-        	if(me().getPosition() != tmpID)
-        	{
-        		stateQueue.add(new AgentState("Walk", tmpID));
-        		stateQueue.add(new AgentState("Unblock", tmpID));
-        		this.printQueue();
+        	if(currentPath.isEmpty()){
+        		List<EntityID> closestPath = new ArrayList<EntityID>();
         		
-        	}else{
-        		stateQueue.add(new AgentState("Unblock", tmpID));
-        		this.printQueue();
+        		//verifica bloqueio mais proximo para limpar a area
+        		if(refugeIDs.isEmpty() == false)
+        		{
+        			for(EntityID refuge : refugeIDs)
+        			{
+        				List<EntityID> path = this.getDijkstraPath(me().getPosition(), refuge);
+        				if(closestPath.isEmpty())
+        				{
+        					closestPath = path;
+        				}else{
+        					if(path.size() < closestPath.size())
+        					{
+        						closestPath = path;
+        					}
+        				}
+        			}
+        		}
+        		currentPath = closestPath;
         	}
-        		
-        }else if (this.stateQueue.isEmpty()){
-        	stateQueue.add(new AgentState("RandomWalk"));
-        	this.printQueue();
-        }
+        	
+        	currentPath = this.walk(currentPath);
+        	sendMove(time,currentPath);
+        	// 	Am I near a blockade?
+        	Blockade target = getTargetBlockade();
+        	if (target != null) {
+        		Logger.info("Clearing blockade " + target);
+        		sendClear(time, target.getID());
+        		return;
+        	}
+        	cleanRefuge = true;
+        }    
         
-        /**
-         * AÇÃO e CONTROLE
-         * Máquina de Estados
-         * Aqui começa a execução das ações na pilha de ações
-         */
-        if(!stateQueue.isEmpty())
+        
+        // Plan a path to a blocked area
+        
+        //List<EntityID> path = search.breadthFirstSearch(me().getPosition(), getBlockedRoads());
+        
+        if(getBlockedRoads().isEmpty() == false)
         {
-        	AgentState currentAction = stateQueue.peek();
-        	System.out.println(stateQueue.peek().getState());
-        	switch(currentAction.getState())
+        	if((currentPath.isEmpty() || lastVertex != currentPath.get(currentPath.size()-1)))
         	{
-        		case "RandomWalk":
-        			System.out.println(currentPath);
-        			//System.out.println("Random Walk da pilha de estados.");
-        			if(currentPath.isEmpty() && pathDefined == false)
-        			{
-        				currentPath = this.walk(currentPath);
-        				pathDefined = true;
-        				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
-        				sendMove(time, currentPath);
-        				return;
-        			}else if(currentPath.size() <= 2){
-        				stateQueue.poll();
-        				pathDefined = false;
-        				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
-        				sendMove(time, currentPath);
-        				currentPath.clear();
-        				return;
-        			}else if(pathDefined == true){
-        				currentPath = this.walk(currentPath);
-        				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
-        				sendMove(time, currentPath);
-        			}
-        			break;
-        		case "LookingNearBlockade":
-        			Blockade target = getTargetBlockade();
-        			if(stateQueue.peek().getState() == "LookingNearBlockade")
-        			{
-        					stateQueue.poll();
-        			}
-        			if(target != null)
-        			{
-        				this.addBeginingQueue(new AgentState("Unblock"));
-        				this.addBeginingQueue(new AgentState("Walk", target.getPosition()));
-        			}
-        			break;
-        		case "Walk":
-        			//System.out.println("Walk da pilha de estados");
-        			System.out.println(currentPath);
-        			if(currentPath.isEmpty() && pathDefined == false){
-        				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
-        				pathDefined = true;
-        				lastPath = currentPath;
-        				currentPath = this.walk(currentPath);
-        				System.out.println("Last Path "+lastPath);
-        				System.out.println("Current Path "+currentPath);
-        				System.out.println(lastPath.size() == currentPath.size());
-        				if(lastPath.size() == currentPath.size())
-        				{
-        					this.addBeginingQueue(new AgentState("Unblock"));
-        				}
-        				sendMove(time, currentPath);
-        				return;
-        			}else if(currentPath.size() >2 && pathDefined == true)
-        			{
-        				lastPath = currentPath;
-        				currentPath = this.walk(currentPath);
-        				System.out.println("Last Path "+lastPath);
-        				System.out.println("Current Path "+currentPath);
-        				System.out.println(lastPath.size() == currentPath.size());
-        				if(lastPath.size() == currentPath.size())
-        				{
-        					this.addBeginingQueue(new AgentState("Unblock"));
-        				}
-        				sendMove(time, currentPath);
-        				return;
-        			}else if(currentPath.size() <= 2){
-        				stateQueue.poll();
-        				sendMove(time,currentPath);
-        				pathDefined = false;
-        				return;
-        			}
-        			
-        			break;
-        		
-        		case "Unblock":
-        			Blockade newTarget = getTargetBlockade();
-        			if(newTarget != null && newTarget.isPositionDefined()){
-        				System.out.println("ID "+newTarget.getID());
-        				sendClear(time, newTarget.getID());
-        			}else{
-        				stateQueue.poll();
-        			}
-        			
-        			break;
+        		int index = new Random().nextInt(getBlockedRoads().size());
+        		List<EntityID> path = getDijkstraPath(me().getPosition(), getBlockedRoads().get(index));
+        		lastVertex = path.get(path.size()-1);
+        		currentPath = path;
+        	}
+        	
+        	if (currentPath.isEmpty() == false) {
+            	currentPath = this.walk(currentPath);
+            	sendMove(time, currentPath);
+            	return;
         	}
         }
-        /**
-         * fim da máquina de estados
-         */
         
-        /**
-         * imprime fila de tarefas
-         
-        System.out.println("------------------------------------");
-        System.out.println("TimeStep "+time);
-        System.out.println("Agente Policial  "+me().getID().getValue());
-        System.out.println("Posição Atual "+me().getPosition());
-        System.out.println("Caminho a seguir "+currentPath);
-        System.out.println("Lista de values "+this.getValue());
-        int ct = 1;
-        for(AgentState a : this.stateQueue)
-        {
-        	System.out.println("Estado "+ct+" - "+a.getState());
-        	System.out.println("Alvo: "+a.getId());
-        	ct++;
-        }
-        System.out.println("------------------------------------");
-        */
-    }
-    
-    protected void addBeginingQueue(AgentState newState)
-    {
-    	Queue<AgentState> tmpQueue = new LinkedList<AgentState>();
-		tmpQueue.addAll(stateQueue);
-		stateQueue.clear();
-		stateQueue.add(newState);
-		stateQueue.addAll(tmpQueue);
-    }
-    
-    protected void printQueue()
-    {
-    	int ct = 1;
-    	System.out.println("------------------------------------");
-        for(AgentState a : this.stateQueue)
-        {
-        	System.out.println("Estado "+ct+" - "+a.getState());
-        	System.out.println("Alvo: "+a.getId());
-        	ct++;
-        }
-        System.out.println("------------------------------------");
+        Logger.debug("Couldn't plan a path to a blocked road");
+        Logger.info("Moving randomly");
+        currentPath = this.walk(currentPath);
+        sendMove(time, currentPath);
+        return;
+        
     }
 
     @Override

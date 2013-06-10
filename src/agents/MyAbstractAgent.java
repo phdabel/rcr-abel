@@ -19,6 +19,7 @@ import org.jgrapht.graph.ListenableUndirectedWeightedGraph;
 
 import message.ColeagueInformation;
 import message.LockInformation;
+import message.MessageType;
 import message.MyMessage;
 import message.ReleaseInformation;
 import message.RetainedInformation;
@@ -159,7 +160,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
      */
     protected List<EntityID> walk(List<EntityID> path) {
     	
-    	if(path.isEmpty()){
+    	if(path.isEmpty() | path.size() <= 2){
     		
     		Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.ROAD);
     		List<Road> road = new ArrayList<Road>();
@@ -249,6 +250,14 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     				}
     			}
     			
+    		}
+    		if(next instanceof StandardEntity)
+    		{
+    			StandardEntity b = (StandardEntity)next;
+    			if(g.containsVertex(b.getID()) == false)
+    			{
+    				g.addVertex(b.getID());
+    			}
     		}
     		
     	}
@@ -372,10 +381,16 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
                 byte[] msg = ((AKSpeak) next).getContent();
                 try {
                     Object object = Serializer.deserialize(msg);
-                    if (object instanceof TokenInformation) {
+                    if (object instanceof TokenInformation && ((TokenInformation)object).getValueType() == MessageType.BLOCKADE && me().getStandardURN() == StandardEntityURN.POLICE_FORCE ) {
                     	TokenInformation tmp = (TokenInformation)object;
                     	this.getReceivedMessage().add(tmp);
-                    } else if (object instanceof ColeagueInformation) {
+                    } else if(object instanceof TokenInformation && ((TokenInformation)object).getValueType() == MessageType.BUILDING_FIRE && me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
+                    	TokenInformation tmp = (TokenInformation)object;
+                    	this.getReceivedMessage().add(tmp);
+                    } else if(object instanceof TokenInformation && ((TokenInformation)object).getValueType() == MessageType.RESCUE && me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM){
+                    	TokenInformation tmp = (TokenInformation)object;
+                    	this.getReceivedMessage().add(tmp);
+                	} else if (object instanceof ColeagueInformation) {
                     	ColeagueInformation tmp = (ColeagueInformation)object;
                     	this.getReceivedMessage().add(tmp);
                     }else if(object instanceof RetainedInformation){

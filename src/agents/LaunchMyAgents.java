@@ -53,6 +53,7 @@ public class LaunchMyAgents {
 			int at = -1;
 			// CHECKSTYLE:OFF:ModifiedControlVariable
 			for (int i = 0; i < args.length; ++i) {
+				
 				if (args[i].equals(FIRE_BRIGADE_FLAG)) {
 					fb = Integer.parseInt(args[++i]);
 				}
@@ -97,6 +98,7 @@ public class LaunchMyAgents {
 	 */
 	private static void connect(ComponentLauncher launcher, int fb, int pf, int at, Config config) throws InterruptedException, ConnectionException {
 		int i = 0;
+		/*
 		try {
 			while (fb-- != 0) {
 				Logger.info("Conectando MyFireBrigade " + (i++) + "...");
@@ -106,7 +108,7 @@ public class LaunchMyAgents {
 		}
 		catch (ComponentConnectionException e) {
 			Logger.info("Falhou: " + e.getMessage());
-		}
+		}*/
 		
         try {
             while (pf-- != 0) {
@@ -118,7 +120,8 @@ public class LaunchMyAgents {
         catch (ComponentConnectionException e) {
             Logger.info("failed: " + e.getMessage());
         }
-            
+           
+        /*
         try {
             while (at-- != 0) {
                 Logger.info("Connecting ambulance team " + (i++) + "...");
@@ -128,7 +131,7 @@ public class LaunchMyAgents {
         }
         catch (ComponentConnectionException e) {
             Logger.info("failed: " + e.getMessage());
-        }
+        }*/
             
         try {
             while (true) {
