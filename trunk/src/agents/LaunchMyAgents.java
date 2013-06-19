@@ -110,7 +110,7 @@ public class LaunchMyAgents {
 		catch (ComponentConnectionException e) {
 			Logger.info("Falhou: " + e.getMessage());
 		}
-		/*
+		
         try {
             while (pf-- != 0) {
                 Logger.info("Connecting police force " + (i++) + "...");
@@ -122,7 +122,7 @@ public class LaunchMyAgents {
             Logger.info("failed: " + e.getMessage());
         }
            
-        
+        /*
         try {
             while (at-- != 0) {
                 Logger.info("Connecting ambulance team " + (i++) + "...");
