@@ -98,7 +98,8 @@ public class LaunchMyAgents {
 	 */
 	private static void connect(ComponentLauncher launcher, int fb, int pf, int at, Config config) throws InterruptedException, ConnectionException {
 		int i = 0;
-		/*
+		
+		
 		try {
 			while (fb-- != 0) {
 				Logger.info("Conectando MyFireBrigade " + (i++) + "...");
@@ -108,8 +109,8 @@ public class LaunchMyAgents {
 		}
 		catch (ComponentConnectionException e) {
 			Logger.info("Falhou: " + e.getMessage());
-		}*/
-		
+		}
+		/*
         try {
             while (pf-- != 0) {
                 Logger.info("Connecting police force " + (i++) + "...");
@@ -121,7 +122,7 @@ public class LaunchMyAgents {
             Logger.info("failed: " + e.getMessage());
         }
            
-        /*
+        
         try {
             while (at-- != 0) {
                 Logger.info("Connecting ambulance team " + (i++) + "...");

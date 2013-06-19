@@ -2,16 +2,17 @@ package agents;
 
 import java.util.Comparator;
 
-import message.TokenInformation;
+import worldmodel.jobs.Token;
+
 /**
    A comparator that sorts entities by distance to a reference point.
 */
-public class ValueSorter implements Comparator<TokenInformation> {
+public class ValueSorter implements Comparator<Token> {
 
 	@Override
-	public int compare(TokenInformation t1, TokenInformation t2) {
+	public int compare(Token t1, Token t2) {
 		// TODO Auto-generated method stub
-		return (t1.getCapability() > t2.getCapability() ? -1 : (t1.getCapability() == t2.getCapability() ? 0 : 1));
+		return (t1.getHolderCapability() > t2.getHolderCapability() ? -1 : (t1.getHolderCapability() == t2.getHolderCapability() ? 0 : 1));
 	}
     
 

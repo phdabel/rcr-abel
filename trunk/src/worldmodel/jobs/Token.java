@@ -1,38 +1,49 @@
 package worldmodel.jobs;
 
-import rescuecore2.standard.entities.StandardEntity;
-import rescuecore2.standard.entities.StandardEntityURN;
-import rescuecore2.worldmodel.Entity;
-import rescuecore2.worldmodel.EntityID;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
-public class Token extends StandardEntity {
-
-	private Double threshold = .5;
-	private EntityID owner;
-	private EntityID value;
-	private Boolean potential = false;
+public class Token implements Serializable {
 	
-	public Token(EntityID id) {
-		super(id);
-		this.setValue(id);
-	}
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+	private Integer id;
+	private Task t;
+	private Double threshold;
+	private Double holderCapability = 0.0;
+	private List<Integer> visitedAgents = new ArrayList<Integer>();
 	
-	public Token(EntityID id, Double threshold)
+	
+	public Token(Integer id, Task t)
 	{
-		super(id);
-		this.setValue(id);
-		this.setThreshold(threshold);
-		
+		this.setId(id);
+		this.setTask(t);
 	}
-
-	@Override
-	public StandardEntityURN getStandardURN() {
-		return StandardEntityURN.WORLD;
+	
+	public List<Integer> getVisitedAgents() {
+		return visitedAgents;
 	}
-
-	@Override
-	protected Entity copyImpl() {
-		return new Token(getID());
+	public void setVisitedAgents(List<Integer> visitedAgents) {
+		this.visitedAgents = visitedAgents;
+	}
+	public void addAgent(Integer agent)
+	{
+		this.visitedAgents.add(agent);
+	}
+	public Task getTask() {
+		return t;
+	}
+	public void setTask(Task t) {
+		this.t = t;
+	}
+	public Integer getId() {
+		return id;
+	}
+	public void setId(Integer id) {
+		this.id = id;
 	}
 
 	public Double getThreshold() {
@@ -43,28 +54,12 @@ public class Token extends StandardEntity {
 		this.threshold = threshold;
 	}
 
-	public EntityID getOwner() {
-		return owner;
+	public Double getHolderCapability() {
+		return holderCapability;
 	}
 
-	public void setOwner(EntityID owner) {
-		this.owner = owner;
-	}
-
-	public EntityID getValue() {
-		return value;
-	}
-
-	public void setValue(EntityID value) {
-		this.value = value;
-	}
-
-	public Boolean getPotential() {
-		return potential;
-	}
-
-	public void setPotential(Boolean potential) {
-		this.potential = potential;
+	public void setHolderCapability(Double holderCapability) {
+		this.holderCapability = holderCapability;
 	}
 
 }

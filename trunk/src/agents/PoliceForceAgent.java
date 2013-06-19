@@ -10,6 +10,7 @@ import java.util.Random;
 
 import message.Channel;
 import message.ColeagueInformation;
+import message.ColeagueType;
 import message.LockInformation;
 import message.MessageType;
 import message.ReleaseInformation;
@@ -45,7 +46,6 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     private List<EntityID> lastPath = new ArrayList<EntityID>();
     private int distance;
     private Boolean cleanRefuge = false;
-    private TokenInformation tokenDef;
     private Boolean pathDefined = false;
     @Override
     public String toString() {
@@ -66,21 +66,11 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     	
     	if (time == config.getIntValue(kernel.KernelConstants.IGNORE_AGENT_COMMANDS_KEY)) {
             sendSubscribe(time, this.getCommunicationChannel());
-        }
+            
+           }
 		
 		//enviando informação sobre quem sou eu para os colegas
-    	
-		if(time <= 5){
-		
-			ColeagueInformation meInformation =
-    			new ColeagueInformation(
-    					me().getID().getValue(),
-    					me().getPosition().getValue()
-    					);
-			this.sendMessage(time, channel, meInformation);
-		}
-		
-		
+   		
     	//recebendo mensagens
     	this.heardMessage(heard);
     	
@@ -89,15 +79,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
          */
         for(Object msg: this.getReceivedMessage())
     	{
-    	   	if(msg instanceof ColeagueInformation)
-    	   	{
-    	   		ColeagueInformation tmpColeague = (ColeagueInformation)msg;
-    	   		if(this.getColeagues().contains((Integer)tmpColeague.getId()) == false)
-    	   		{
-    	   			this.getColeagues().add((Integer)tmpColeague.getId());
-    	   		}
-    	   	}
-    	   	if(msg instanceof TokenInformation)
+        	if(msg instanceof TokenInformation)
     	   	{
     	   		TokenInformation t = (TokenInformation)msg;
     	   		if(t.getOwner() == me().getID().getValue()){
@@ -118,7 +100,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         		(!this.getValue().isEmpty() && stateQueue.peek().getState() == "RandomWalk")
            )
         {
-        	if(stateQueue.peek().getState() == "RandomWalk"){
+        	if(!stateQueue.isEmpty() && stateQueue.peek().getState() == "RandomWalk"){
         		stateQueue.remove(stateQueue.peek());
         	}
         	TokenInformation tmp = this.getValue().get(this.getValue().size() - 1);
@@ -136,7 +118,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         		this.printQueue();
         	}
         		
-        }else if (this.stateQueue.isEmpty()){
+        }else if (this.stateQueue.isEmpty() && time > 5){
         	stateQueue.add(new AgentState("RandomWalk"));
         	this.printQueue();
         }
@@ -188,10 +170,11 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         			}
         			break;
         		case "Walk":
-        			//System.out.println("Walk da pilha de estados");
-        			System.out.println(currentPath);
+        			System.out.println(currentAction.getId());
+        			System.out.println("caminho dentro do walk "+currentPath);
         			if(currentPath.isEmpty() && pathDefined == false){
-        				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
+        				currentPath = search.breadthFirstSearch(me().getPosition(), currentAction.getId());
+        				//currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
         				pathDefined = true;
         				lastPath = currentPath;
         				currentPath = this.walk(currentPath);
