@@ -5,31 +5,25 @@ import static rescuecore2.misc.Handy.objectsToIDs;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 import java.util.Map;
+import java.util.HashMap;
 
-import org.jgrapht.Graph;
 import org.jgrapht.alg.DijkstraShortestPath;
-import org.jgrapht.alg.KruskalMinimumSpanningTree;
 import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.ListenableUndirectedWeightedGraph;
 
-import message.ColeagueInformation;
-import message.LockInformation;
 import message.MessageType;
 import message.MyMessage;
-import message.ReleaseInformation;
-import message.RetainedInformation;
 import message.Serializer;
-import message.TokenInformation;
 
 import rescuecore2.Constants;
 import rescuecore2.log.Logger;
 import rescuecore2.messages.Command;
 
+import rescuecore2.worldmodel.Entity;
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.standard.components.StandardAgent;
 import rescuecore2.standard.entities.StandardEntity;
@@ -43,6 +37,8 @@ import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntityURN;
 
 import sample.SampleSearch;
+import worldmodel.jobs.Task;
+import worldmodel.jobs.Token;
 /**
 Abstract base class for MyAgent.
 @param <E> The subclass of StandardEntity this agent wants to control.
@@ -53,7 +49,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 
     private static final String SAY_COMMUNICATION_MODEL = StandardCommunicationModel.class.getName();
     private static final String SPEAK_COMMUNICATION_MODEL = ChannelCommunicationModel.class.getName();
-    protected static final Double THRESHOLD = 0.5;
+    protected static final Double THRESHOLD = 0.3;
     private int communicationChannel;
     /**
        The search algorithm.
@@ -82,17 +78,35 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     */
     protected List<EntityID> refugeIDs;
 
-    private Map<EntityID, Set<EntityID>> neighbours;
+    //private Map<EntityID, Set<EntityID>> neighbours;
     protected boolean	channelComm;
     
-    private ArrayList<Integer> coleagues = new ArrayList<Integer>();
-    private ArrayList<EntityID> otherJobs = new ArrayList<EntityID>();
-    private List<TokenInformation> value = new ArrayList<TokenInformation>();
-    private ArrayList<TokenInformation> potentialValue = new ArrayList<TokenInformation>();
     private ArrayList<MyMessage> receivedMessages = new ArrayList<MyMessage>();
-    private ArrayList<RetainedInformation> retained = new ArrayList<RetainedInformation>();
+    
+    /**
+     * Known Tasks Set
+     * set containing at each timestep all the tasks that has been perceived by all agents
+     */
+    protected Map<Integer, List<Task>> KTS = new HashMap<Integer, List<Task>>();
+    /**
+     * Token Set is the set of tokens each agent currently holds
+     */
+    protected List<Token> TkS = new ArrayList<Token>();
+    /**
+     * Temporary Token Set
+     * set containing the tokens created by the agent in the current time step
+     */
+    protected List<Token> TmpTkS = new ArrayList<Token>();
+    /**
+     * Accomplished Tasks Set
+     * set containing at each time step all the tasks that have been accomplished by all the agents
+     */
+    protected Map<Integer, List<Task>> ATS = new HashMap<Integer, List<Task>>();
+    
     protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> map;
-    private ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> kruskalMap;
+    
+    protected Task currentTask = null;
+    
     /*
      * Constructor of MyAbstractAgent
      */
@@ -107,9 +121,9 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
         //creates arrays list for buildings, roads and refuges of the world model
         
         buildingIDs = new ArrayList<EntityID>();
-        //roadIDs = new ArrayList<EntityID>();
+        roadIDs = new ArrayList<EntityID>();
         refugeIDs = new ArrayList<EntityID>();
-        /*
+        
         //assign values to buildings, roads and refuges according to model
         for (StandardEntity next : model) {
             if (next instanceof Building) {
@@ -121,11 +135,8 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
             if (next instanceof Refuge) {
                 refugeIDs.add(next.getID());
             }
-        }*/
-        
-        this.map = this.worldGraph();
-        this.kruskalMap = this.minimalSpanningTree(this.map);
-        
+        }
+         
         /**
          * sets communication via radio
          */
@@ -146,7 +157,8 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
          */
         search = new SampleSearch(model);
         // assign graph of world model made by SampleSearch to neighbours
-        neighbours = search.getGraph();
+        //neighbours = search.getGraph();
+        this.map = this.worldGraph();
         
         useSpeak = config.getValue(Constants.COMMUNICATION_MODEL_KEY).equals(SPEAK_COMMUNICATION_MODEL);
         Logger.debug("Modelo de Comunicação: " + config.getValue(Constants.COMMUNICATION_MODEL_KEY));
@@ -160,7 +172,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
      */
     protected List<EntityID> walk(List<EntityID> path) {
     	
-    	if(path.isEmpty() | path.size() <= 2){
+    	if(path.isEmpty()){
     		
     		Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.ROAD);
     		List<Road> road = new ArrayList<Road>();
@@ -172,9 +184,26 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		Integer index = new Random().nextInt(road.size());
     		
     		EntityID destiny = road.get(index).getID();
+    		//path = search.breadthFirstSearch(location().getID(), destiny);
     		path = this.getDijkstraPath(location().getID(), destiny);
     	}else{
-    		path = this.getDijkstraPath(location().getID(), path.get((path.size() - 1)));
+    		//path = search.breadthFirstSearch(location().getID(), path.get((path.size() - 1)));
+    		List<EntityID> tmp = new ArrayList<EntityID>();
+    		int ct = 0;
+    		for(EntityID p : path)
+    		{
+    			
+    			if(p != location().getID() && ct == 0)
+    			{
+    				tmp.add(p);
+    			}else if(p == location().getID())
+    			{
+    				ct = 1;
+    				tmp.add(p);
+    			}
+    		}
+    		path.removeAll(tmp);
+    		//path = this.getDijkstraPath(location().getID(), path.get((path.size() - 1)));
     		
     	}
     	return path;
@@ -192,8 +221,8 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> worldGraph()
     {
     	ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> g = new ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge>(DefaultWeightedEdge.class);
-    	for(StandardEntity next : model)
-    	{
+    	for(Entity next : model)
+    	{    		
     		if(next instanceof Road)
     		{
     			Road b = (Road)next;
@@ -304,7 +333,8 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
         List<EntityID> shortestPath = new ArrayList<EntityID>();
         for(EntityID t : objectsToIDs(targets))
         {
-        	List<EntityID> path = this.getDijkstraPath(sourcePosition, t);
+        	List<EntityID> path = search.breadthFirstSearch(sourcePosition, t);
+        	//List<EntityID> path = this.getDijkstraPath(sourcePosition, t);
         	if(shortestPath.isEmpty())
         	{
         		shortestPath = path;
@@ -335,35 +365,11 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 		cap = 1 - (distanceOfTarget.doubleValue() / distanceWorldModel);
 		return cap;
 	}
-    
-    
-    public ArrayList<Integer> getColeagues() {
-		return coleagues;
-	}
-
-	public void setColeagues(ArrayList<Integer> coleagues) {
-		this.coleagues = coleagues;
-	}
 	
-	protected void sendmessage(int time, int channel, ArrayList<TokenInformation> message)
-	{
-		byte[] speak = null;
-        try {
-            speak = Serializer.serialize(message);
-            sendSpeak(time, channel, speak);
-//            System.out.println("Mensagem de enviada com sucesso");
-            Logger.debug("Mensagem enviado com sucesso");
-        } catch (IOException e) {
-        	e.printStackTrace();
-            Logger.error("IoException ao gerar mensagem de " + e.getMessage());
-//            System.out.println("Erro ao enviar a mensagem   ");
-        }
-	}
-	
-	protected void sendMessage(int time, int channel, MyMessage buildingFire) {
+	protected void sendMessage(int time, int channel, MyMessage message) {
         byte[] speak = null;
         try {
-            speak = Serializer.serialize(buildingFire);
+            speak = Serializer.serialize(message);
             sendSpeak(time, channel, speak);
 //            System.out.println("Mensagem de enviada com sucesso");
             Logger.debug("Mensagem enviado com sucesso");
@@ -381,34 +387,9 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
                 byte[] msg = ((AKSpeak) next).getContent();
                 try {
                     Object object = Serializer.deserialize(msg);
-                    if (object instanceof TokenInformation && ((TokenInformation)object).getValueType() == MessageType.BLOCKADE && me().getStandardURN() == StandardEntityURN.POLICE_FORCE ) {
-                    	TokenInformation tmp = (TokenInformation)object;
+                    if (object instanceof MyMessage) {
+                    	MyMessage tmp = (MyMessage)object;
                     	this.getReceivedMessage().add(tmp);
-                    } else if(object instanceof TokenInformation && ((TokenInformation)object).getValueType() == MessageType.BUILDING_FIRE && me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
-                    	TokenInformation tmp = (TokenInformation)object;
-                    	this.getReceivedMessage().add(tmp);
-                    } else if(object instanceof TokenInformation && ((TokenInformation)object).getValueType() == MessageType.RESCUE && me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM){
-                    	TokenInformation tmp = (TokenInformation)object;
-                    	this.getReceivedMessage().add(tmp);
-                	} else if (object instanceof ColeagueInformation) {
-                    	ColeagueInformation tmp = (ColeagueInformation)object;
-                    	this.getReceivedMessage().add(tmp);
-                    }else if(object instanceof RetainedInformation){
-                    	RetainedInformation tmp = (RetainedInformation)object;
-                    	this.getReceivedMessage().add(tmp);
-                    }else if(object instanceof ReleaseInformation){
-                    	ReleaseInformation tmp = (ReleaseInformation)object;
-                    	this.getReceivedMessage().add(tmp);
-                    }else if(object instanceof LockInformation){
-                    	LockInformation tmp = (LockInformation)object;
-                    	this.getReceivedMessage().add(tmp);
-                    }else if (object instanceof ArrayList) {
-                    	for(TokenInformation t : (ArrayList<TokenInformation>)object)
-                    	{
-                    		this.getReceivedMessage().add(t);
-                    	}
-                    	  //this.getReceivedMessage().add((MyMessage)object);
-                    	//System.out.println("Não entrou em nada");
                     }else{
                     	
                     }
@@ -421,17 +402,19 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
         }
     }
     
+    
   //retorna o caminho mais curto (algoritmo de Dijkstra) do local atual do agente ate um destino
     public List<EntityID> getDijkstraPath(EntityID position, EntityID destiny)
     {
     	List<EntityID> returnedPath = new ArrayList<EntityID>();
+    	
     	DijkstraShortestPath<EntityID, DefaultWeightedEdge> shortestPath = 
-    			new DijkstraShortestPath<EntityID, DefaultWeightedEdge>(this.kruskalMap, position, destiny);
+    			new DijkstraShortestPath<EntityID, DefaultWeightedEdge>(this.map, position, destiny);
     	returnedPath.add(shortestPath.getPath().getStartVertex());
     	for(DefaultWeightedEdge e : shortestPath.getPathEdgeList())
     	{
-    		EntityID sourceV = this.kruskalMap.getEdgeSource(e);
-    		EntityID targetV = this.kruskalMap.getEdgeTarget(e);
+    		EntityID sourceV = this.map.getEdgeSource(e);
+    		EntityID targetV = this.map.getEdgeTarget(e);
     		if(returnedPath.contains(sourceV) == false && shortestPath.getPath().getEndVertex() != sourceV)
     		{
     			returnedPath.add(sourceV);
@@ -444,29 +427,6 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     	returnedPath.add(shortestPath.getPath().getEndVertex());
     	return returnedPath;
     }
-    
-    //monta a minimal spanning tree do mapa
-    protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> minimalSpanningTree(Graph<EntityID, DefaultWeightedEdge> graph)
-    {
-    	ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> h = new ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge>(DefaultWeightedEdge.class);
-		
-    	KruskalMinimumSpanningTree kruskalMST = new KruskalMinimumSpanningTree(graph);
-		Iterator itr = kruskalMST.getEdgeSet().iterator();
-		while(itr.hasNext())
-		{
-			DefaultWeightedEdge edge = (DefaultWeightedEdge) itr.next();
-			if(h.containsVertex(graph.getEdgeSource(edge)) == false)
-			{
-				h.addVertex(graph.getEdgeSource(edge));
-			}
-			if(h.containsVertex(graph.getEdgeTarget(edge)) == false)
-			{
-				h.addVertex(graph.getEdgeTarget(edge));
-			}
-			h.addEdge(graph.getEdgeSource(edge), graph.getEdgeTarget(edge));
-		}
-		return h;
-    }
 
 	public ArrayList<MyMessage> getReceivedMessage() {
 		return receivedMessages;
@@ -476,22 +436,6 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 		this.receivedMessages = receivedMessage;
 	}
 
-	public List<TokenInformation> getValue() {
-		return value;
-	}
-
-	public void setValue(List<TokenInformation> value) {
-		this.value = value;
-	}
-
-	public ArrayList<TokenInformation> getPotentialValue() {
-		return potentialValue;
-	}
-
-	public void setPotentialValue(ArrayList<TokenInformation> potentialValue) {
-		this.potentialValue = potentialValue;
-	}
-
 	public int getCommunicationChannel() {
 		return communicationChannel;
 	}
@@ -499,22 +443,190 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 	public void setCommunicationChannel(int communicationChannel) {
 		this.communicationChannel = communicationChannel;
 	}
-
-	public ArrayList<RetainedInformation> getRetained() {
-		return retained;
+	
+	
+	public Boolean taskInKTS(Task task)
+	{
+		int ct = 0;
+		for(Map.Entry<Integer, List<Task>> entry : this.KTS.entrySet())
+		{
+			for(Task t : entry.getValue())
+			{
+				if(t.getId() == task.getId())
+				{
+					ct++;
+					break;
+				}
+			}
+		}
+		if(ct >= 1){
+			return true;
+		}else{
+			return false;
+		}
+	}
+	
+	/**
+	 * 
+	 * @param task
+	 * @param timestep
+	 */
+	public void onPercReceived(Task task, int timestep)
+	{
+		//if (task not in KTS)
+		if( !this.taskInKTS(task) )
+		{
+			//adiciona task em KTS
+			if(this.KTS.containsKey(timestep))
+			{
+				List<Task> tmpTask = this.KTS.get(timestep);
+				tmpTask.add(task);
+				this.KTS.put(timestep, tmpTask);
+			}else{
+				List<Task> tmpTask = new ArrayList<Task>();
+				tmpTask.add(task);
+				this.KTS.put(timestep, tmpTask);
+			}
+			
+			//cria tokens e insere em TmpTokens
+			for(int i = 0; i < task.getNumberTokens(); i++)
+			{
+				Token tok = new Token(i, task);
+				tok.setThreshold(THRESHOLD);
+				
+				this.TmpTkS.add(tok);
+			}
+			
+			//envia mensagem
+			MyMessage msg = new MyMessage(MessageType.ANNOUNCE, task);
+			msg.setSender(me().getID().getValue());
+			sendMessage(timestep, this.getCommunicationChannel(), msg);
+			
+		}
+	}
+	
+	public void onMsgReceived(MyMessage msg, int timestep)
+	{
+		if(msg.getType() == MessageType.ACCOMPLISHED_TASK)
+		{
+			List<Task> tasks = new ArrayList<Task>();
+			tasks = this.ATS.get(timestep);
+			tasks.add(msg.getTask());
+			this.ATS.put(timestep, tasks);
+		}
+		if(msg.getType() == MessageType.ANNOUNCE)
+		{
+			if( !this.taskInKTS(msg.getTask()) )
+			{
+				List<Task> tmpTask = this.KTS.get(timestep);
+				tmpTask.add(msg.getTask());
+				this.KTS.put(timestep, tmpTask);
+			}else{
+				if(msg.getSender() >= me().getID().getValue())
+				{
+					for(Token t : this.TmpTkS)
+					{
+						//remove itens do TmpTkS
+						if(t.getTask().getId() == msg.getTask().getId())
+						{
+							this.TmpTkS.remove(t);
+						}
+					}
+					if(this.currentTask == msg.getTask())
+					{
+						this.stopCurrentTask();
+					}
+				}
+			}
+		}
+		if(msg.getType() == MessageType.TOKEN)
+		{
+			this.TkS.addAll(msg.getToken());
+		}
+	}
+	
+	protected void onTaskaccomplishment(Task task, int timestep)
+	{
+		if(this.ATS.containsKey(timestep))
+		{
+			List<Task> tmpTask = new ArrayList<Task>();
+			tmpTask = this.ATS.get(timestep);
+			tmpTask.add(task);
+			this.ATS.put(timestep, tmpTask);
+		}
+		MyMessage msg = new MyMessage(MessageType.ACCOMPLISHED_TASK, task);
+		sendMessage(timestep, this.getCommunicationChannel(), msg);
+		return;
+	}
+	
+	protected Task tokenManagement(int timestep)
+	{
+		//remove tasks ja terminadas da lista de tokens
+		for(Map.Entry<Integer, List<Task>> entry : this.ATS.entrySet())
+		{
+			for(Task t : entry.getValue()){
+				for(Token tk : this.TkS)
+				{
+					if(tk.getTask() == t)
+					{
+						this.TkS.remove(tk);
+					}
+				}
+			}
+		}
+		//tokens que serao realizados
+		List<Token> tokenSet = this.chooseTokenSet(this.TkS);
+		//tokens que serao enviados
+		this.TkS.removeAll(tokenSet);
+		
+		List<Token> sendTokenSet = this.TkS;
+		this.TkS.clear();
+		
+		MyMessage msg = new MyMessage(MessageType.TOKEN, sendTokenSet);
+		sendMessage(timestep, this.getCommunicationChannel(), msg);
+		
+		this.TkS = tokenSet;
+		this.TkS.addAll(this.TmpTkS);
+		
+		return this.startTask(chooseTask(tokenSet));
+		
+	}
+	
+	protected Task startTask(Task someTask) {
+		return someTask;
+		
 	}
 
-	public void setRetained(ArrayList<RetainedInformation> retained) {
-		this.retained = retained;
+	private Task chooseTask(List<Token> tokenSet) {
+		
+		Integer index = new Random().nextInt(tokenSet.size());
+		return tokenSet.get(index).getTask();
 	}
 
-	public ArrayList<EntityID> getOtherJobs() {
-		return otherJobs;
+	public ArrayList<Token> chooseTokenSet(List<Token> tokens)
+	{
+		return this.maxCap(tokens);
 	}
+	
+	public ArrayList<Token> maxCap(List<Token> tokens)
+	{
+		ArrayList<Token> in = new ArrayList<Token>();
+		Collections.sort(tokens, new ValueSorter());
+		int ct = 1;
+		for(Token t : tokens){
+			if(ct <= 3)
+			{
+				in.add(t);
+				ct++;
+			}
+		}
+		return in;
+	}
+	
+	
 
-	public void setOtherJobs(ArrayList<EntityID> otherJobs) {
-		this.otherJobs = otherJobs;
-	}
+	
+	protected abstract void stopCurrentTask();
 
 
 }

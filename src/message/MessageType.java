@@ -1,10 +1,12 @@
 package message;
 
-public enum MessageType {
+import java.io.Serializable;
+
+public enum MessageType implements Serializable{
 	
-	BUILDING_FIRE("Building on Fire"),
-	BLOCKADE("Blockade"),
-	RESCUE("Civillian Rescue");
+	ANNOUNCE("Announcement"),
+	ACCOMPLISHED_TASK("Accomplished Task"),
+	TOKEN("Token");
 	
 	String name;
 	
