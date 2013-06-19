@@ -4,23 +4,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
-import java.util.Random;
 
 import message.Channel;
-import message.ColeagueType;
-import message.MessageType;
 import message.MyMessage;
 import rescuecore2.log.Logger;
 import rescuecore2.messages.Command;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.FireBrigade;
-import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Refuge;
 import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
@@ -30,7 +23,6 @@ import rescuecore2.worldmodel.EntityID;
 import sample.DistanceSorter;
 import worldmodel.jobs.Task;
 import worldmodel.jobs.Object;
-import static rescuecore2.misc.Handy.objectsToIDs;
 
 
 public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {

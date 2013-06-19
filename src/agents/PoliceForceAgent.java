@@ -8,15 +8,6 @@ import java.util.EnumSet;
 import java.util.Queue;
 import java.util.Random;
 
-import message.Channel;
-import message.ColeagueInformation;
-import message.ColeagueType;
-import message.LockInformation;
-import message.MessageType;
-import message.ReleaseInformation;
-import message.RetainedInformation;
-import message.TokenInformation;
-
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.messages.Command;
@@ -34,19 +25,16 @@ import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.PoliceForce;
 import rescuecore2.standard.entities.Area;
 
-/**
-   A sample police force agent.
- */
 public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 	
-	private static final int channel = Channel.BROADCAST.ordinal();
-    private static final String DISTANCE_KEY = "clear.repair.distance";
+	private static final String DISTANCE_KEY = "clear.repair.distance";
     private List<EntityID> currentPath = new ArrayList<EntityID>();
     private Queue<AgentState> stateQueue = new LinkedList<AgentState>();
     private List<EntityID> lastPath = new ArrayList<EntityID>();
     private int distance;
     private Boolean cleanRefuge = false;
     private Boolean pathDefined = false;
+    
     @Override
     public String toString() {
         return "Sample police force";
@@ -79,17 +67,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
          */
         for(Object msg: this.getReceivedMessage())
     	{
-        	if(msg instanceof TokenInformation)
-    	   	{
-    	   		TokenInformation t = (TokenInformation)msg;
-    	   		if(t.getOwner() == me().getID().getValue()){
-    	   			this.getValue().add(t);
-    	   		}else if(t.getOwner() == 0)
-    	   		{
-    	   			this.getValue().add(t);
-    	   		}
-    	   		//this.sendMessage(time,  channel, t);
-    	   	}
+        
     	   	
     	}
         /**
@@ -345,6 +323,12 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         }
         return (int)best;
     }
+
+	@Override
+	protected void stopCurrentTask() {
+		// TODO Auto-generated method stub
+		
+	}
 
     /**
        Get the blockade that is nearest this agent.
