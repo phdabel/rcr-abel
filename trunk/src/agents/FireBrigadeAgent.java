@@ -1,5 +1,7 @@
 package agents;
 
+import static rescuecore2.misc.Handy.objectsToIDs;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -12,6 +14,8 @@ import message.Channel;
 import message.MyMessage;
 import rescuecore2.log.Logger;
 import rescuecore2.messages.Command;
+import rescuecore2.standard.entities.Area;
+import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.FireBrigade;
 import rescuecore2.standard.entities.Refuge;
@@ -21,8 +25,8 @@ import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.worldmodel.EntityID;
 import sample.DistanceSorter;
-import worldmodel.jobs.Task;
 import worldmodel.jobs.Object;
+import worldmodel.jobs.Task;
 
 
 public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
@@ -244,7 +248,9 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
         			}
         			break;
         		case "LookingForFire":
-        			for(Task t : this.getFireJob())
+        			Collection<EntityID> all = this.getBurningBuildings();
+        			List<Task> taskList = this.getFireJob(all);
+        			for(Task t : taskList)
         			{
         				this.onPercReceived(t, time);
         			}
@@ -324,40 +330,25 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 	 * 
 	 * @return
 	 */
-	private ArrayList<Task> getFireJob()
+	private List<Task> getFireJob(Collection<EntityID> tasks)
 	{
-		Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.BUILDING);
-		List<Building> buildings = new ArrayList<Building>();
-		for (StandardEntity next : e)
+		List<Task> taskList = new ArrayList<Task>();
+		for(EntityID id : tasks)
 		{
-			Building b = (Building)next;
-			if (b.isOnFire())
+			Building b = (Building)model.getEntity(id);
+			Task _t = new Task(b.getID().getValue(), Object.BUILDING_FIRE, b.getID().getValue());
+			
+			if(b.getTotalArea() < 100)
 			{
-				this.getBuildingDetected().add(b);
-				buildings.add(b);
-			}
-		}
-		//sort by distance
-		Collections.sort(buildings, new DistanceSorter(location(), model));
-		ArrayList<Task> buildingFire = new ArrayList<Task>();
-		for(Building next : buildings)
-		{ 
-			//System.out.println("Get Fire Job detectou predio "+next.getID().getValue()+" Agente: "+me().getID().getValue());
-			Task _t = new Task(next.getID().getValue(), Object.BUILDING_FIRE, next.getID().getValue());
-			_t.setPosition(next.getID().getValue());
-			if(next.getTotalArea() < 100)
-			{
-				//System.out.println("Get Fire Job detectou predio "+next.getID().getValue()+" Agente: "+me().getID().getValue());
 				_t.setNumberTokens(1);
-			}else
-			{
-				//System.out.println("Get Fire Job detectou predio com potential "+next.getID().getValue());
-				Integer totalTokens = Math.abs(next.getTotalArea() / 100);
-				_t.setNumberTokens(totalTokens);	
+			}else{
+				Integer totalTokens = Math.abs(b.getTotalArea() / 100);
+				_t.setNumberTokens(totalTokens);
 			}
-			buildingFire.add(_t);
+			taskList.add(_t);
 		}
-		return buildingFire;
+		
+		return taskList;
 	}
 
 	/**
@@ -370,8 +361,10 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 	public void extinguishFire(int timestep, EntityID building)
 	{
     		Logger.info("Apagando Incêndio " + building);
-    		sendExtinguish(timestep, building, this.maxPower);
-            return;
+    		if (model.getDistance(getID(), building) <= maxDistance) {
+    			sendExtinguish(timestep, building, this.maxPower);
+            	return;
+    		}
     }
 	
 	/**
@@ -406,6 +399,24 @@ public class FireBrigadeAgent extends MyAbstractAgent<FireBrigade> {
 		}
 		return result;
 	}
+	
+	
+	private Collection<EntityID> getBurningBuildings() {
+        Collection<StandardEntity> e = model.getEntitiesOfType(StandardEntityURN.BUILDING);
+        List<Building> result = new ArrayList<Building>();
+        for (StandardEntity next : e) {
+            if (next instanceof Building) {
+                Building b = (Building)next;
+                if (b.isOnFire()) {
+                    result.add(b);
+                }
+            }
+        }
+        // Sort by distance
+        Collections.sort(result, new DistanceSorter(location(), model));
+        return objectsToIDs(result);
+    }
+	
 	
 	/**
 	 * Action
