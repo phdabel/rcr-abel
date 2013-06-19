@@ -134,6 +134,7 @@ public class LaunchMyAgents {
             Logger.info("failed: " + e.getMessage());
         }*/
             
+        /*
         try {
             while (true) {
                 Logger.info("Connecting centre " + (i++) + "...");
@@ -143,7 +144,7 @@ public class LaunchMyAgents {
         }
         catch (ComponentConnectionException e) {
             Logger.info("failed: " + e.getMessage());
-        }
+        }*/
             /*
             try {
                 while (true) {

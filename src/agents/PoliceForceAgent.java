@@ -8,6 +8,9 @@ import java.util.EnumSet;
 import java.util.Queue;
 import java.util.Random;
 
+import message.Channel;
+import message.MyMessage;
+
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.ChangeSet;
 import rescuecore2.messages.Command;
@@ -24,6 +27,8 @@ import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.PoliceForce;
 import rescuecore2.standard.entities.Area;
+import worldmodel.jobs.Object;
+import worldmodel.jobs.Task;
 
 public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 	
@@ -32,6 +37,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
     private Queue<AgentState> stateQueue = new LinkedList<AgentState>();
     private List<EntityID> lastPath = new ArrayList<EntityID>();
     private int distance;
+    private static final int channel = Channel.BROADCAST.ordinal();
     private Boolean cleanRefuge = false;
     private Boolean pathDefined = false;
     
@@ -65,7 +71,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         /**
          * PLANEJAMENTO
          */
-        for(Object msg: this.getReceivedMessage())
+        for(MyMessage msg: this.getReceivedMessage())
     	{
         
     	   	
@@ -73,17 +79,13 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         /**
          * INSERÇÃO DE VALORES NA FILA
          */
-        if(		(!this.getValue().isEmpty() && this.stateQueue.isEmpty() ) 
-        		|| 
-        		(!this.getValue().isEmpty() && stateQueue.peek().getState() == "RandomWalk")
-           )
+        if(this.currentTask != null && this.stateQueue.isEmpty() && this.currentTask.getObject() == Object.BLOCKADE)
         {
         	if(!stateQueue.isEmpty() && stateQueue.peek().getState() == "RandomWalk"){
         		stateQueue.remove(stateQueue.peek());
         	}
-        	TokenInformation tmp = this.getValue().get(this.getValue().size() - 1);
-        	EntityID tmpID = new EntityID(tmp.getAssociatedValue());
-        	this.getValue().remove(this.getValue().size() - 1);
+        	Task tmp = this.currentTask;
+        	EntityID tmpID = new EntityID(tmp.getId());
         	
         	if(me().getPosition() != tmpID)
         	{
@@ -109,7 +111,6 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         if(!stateQueue.isEmpty())
         {
         	AgentState currentAction = stateQueue.peek();
-        	System.out.println(stateQueue.peek().getState());
         	switch(currentAction.getState())
         	{
         		case "RandomWalk":
@@ -148,17 +149,12 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         			}
         			break;
         		case "Walk":
-        			System.out.println(currentAction.getId());
-        			System.out.println("caminho dentro do walk "+currentPath);
         			if(currentPath.isEmpty() && pathDefined == false){
-        				currentPath = search.breadthFirstSearch(me().getPosition(), currentAction.getId());
-        				//currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
+        				//currentPath = search.breadthFirstSearch(me().getPosition(), currentAction.getId());
+        				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
         				pathDefined = true;
         				lastPath = currentPath;
         				currentPath = this.walk(currentPath);
-        				System.out.println("Last Path "+lastPath);
-        				System.out.println("Current Path "+currentPath);
-        				System.out.println(lastPath.size() == currentPath.size());
         				if(lastPath.size() == currentPath.size())
         				{
         					this.addBeginingQueue(new AgentState("Unblock"));
@@ -169,9 +165,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         			{
         				lastPath = currentPath;
         				currentPath = this.walk(currentPath);
-        				System.out.println("Last Path "+lastPath);
-        				System.out.println("Current Path "+currentPath);
-        				System.out.println(lastPath.size() == currentPath.size());
+        				
         				if(lastPath.size() == currentPath.size())
         				{
         					this.addBeginingQueue(new AgentState("Unblock"));
@@ -190,7 +184,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         		case "Unblock":
         			Blockade newTarget = getTargetBlockade();
         			if(newTarget != null && newTarget.isPositionDefined()){
-        				System.out.println("ID "+newTarget.getID());
+        				
         				sendClear(time, newTarget.getID());
         			}else{
         				stateQueue.poll();
@@ -326,8 +320,8 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
 
 	@Override
 	protected void stopCurrentTask() {
-		// TODO Auto-generated method stub
-		
+		this.currentTask = null;
+		this.stateQueue.clear();
 	}
 
     /**
