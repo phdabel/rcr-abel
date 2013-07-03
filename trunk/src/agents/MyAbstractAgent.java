@@ -170,7 +170,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
      * @param fireBrigade 
     @return A random walk.
      */
-    protected List<EntityID> walk(List<EntityID> path) {
+    protected List<EntityID> walk(List<EntityID> path, EntityID local) {
     	
     	if(path.isEmpty()){
     		
@@ -184,26 +184,29 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		Integer index = new Random().nextInt(road.size());
     		
     		EntityID destiny = road.get(index).getID();
-    		//path = search.breadthFirstSearch(location().getID(), destiny);
-    		path = this.getDijkstraPath(location().getID(), destiny);
+    		//path = search.breadthFirstSearch(local, destiny);
+    		path = this.getDijkstraPath(local, destiny);
     	}else{
     		//path = search.breadthFirstSearch(location().getID(), path.get((path.size() - 1)));
-    		List<EntityID> tmp = new ArrayList<EntityID>();
+    		/*List<EntityID> tmp = new ArrayList<EntityID>();
     		int ct = 0;
     		for(EntityID p : path)
     		{
     			
-    			if(p != location().getID() && ct == 0)
+    			if(p != local && ct == 0)
     			{
     				tmp.add(p);
-    			}else if(p == location().getID())
+    			}else if(p == local)
     			{
     				ct = 1;
     				tmp.add(p);
     			}
     		}
+
+    		System.out.println("Tamanho do caminho atual "+path.size());
     		path.removeAll(tmp);
-    		//path = this.getDijkstraPath(location().getID(), path.get((path.size() - 1)));
+    		System.out.println("Tamanho para remoção "+tmp.size());*/
+    		path = this.getDijkstraPath(local, path.get((path.size() - 1)));
     		
     	}
     	return path;
@@ -510,7 +513,12 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 		if(msg.getType() == MessageType.ACCOMPLISHED_TASK)
 		{
 			List<Task> tasks = new ArrayList<Task>();
-			tasks = this.ATS.get(timestep);
+			if(this.ATS.get(timestep) == null)
+			{
+				tasks = new ArrayList<Task>();
+			}else{
+				tasks = this.ATS.get(timestep);
+			}
 			tasks.add(msg.getTask());
 			this.ATS.put(timestep, tasks);
 		}
@@ -518,9 +526,14 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 		{
 			if( !this.taskInKTS(msg.getTask()) )
 			{
-				List<Task> tmpTask = this.KTS.get(timestep);
-				tmpTask.add(msg.getTask());
-				this.KTS.put(timestep, tmpTask);
+				List<Task> tmpTasks;
+				if(this.KTS.get(timestep) == null){
+					tmpTasks = new ArrayList<Task>();
+				}else{
+					tmpTasks = this.KTS.get(timestep);
+				}
+				tmpTasks.add(msg.getTask());
+				this.KTS.put(timestep, tmpTasks);
 			}else{
 				if(msg.getSender() >= me().getID().getValue())
 				{

@@ -90,17 +90,15 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         	if(me().getPosition() != tmpID)
         	{
         		stateQueue.add(new AgentState("Walk", tmpID));
-        		stateQueue.add(new AgentState("Unblock", tmpID));
-        		this.printQueue();
-        		
+        		stateQueue.add(new AgentState("Unblock", tmpID));        		
         	}else{
         		stateQueue.add(new AgentState("Unblock", tmpID));
-        		this.printQueue();
+        		
         	}
         		
         }else if (this.stateQueue.isEmpty() && time > 5){
         	stateQueue.add(new AgentState("RandomWalk"));
-        	this.printQueue();
+        	
         }
         
         /**
@@ -110,15 +108,15 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
          */
         if(!stateQueue.isEmpty())
         {
+        	
         	AgentState currentAction = stateQueue.peek();
         	switch(currentAction.getState())
         	{
         		case "RandomWalk":
-        			System.out.println(currentPath);
         			//System.out.println("Random Walk da pilha de estados.");
         			if(currentPath.isEmpty() && pathDefined == false)
         			{
-        				currentPath = this.walk(currentPath);
+        				currentPath = this.walk(currentPath, me().getPosition());
         				pathDefined = true;
         				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
         				sendMove(time, currentPath);
@@ -131,7 +129,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         				currentPath.clear();
         				return;
         			}else if(pathDefined == true){
-        				currentPath = this.walk(currentPath);
+        				currentPath = this.walk(currentPath, me().getPosition());
         				this.addBeginingQueue(new AgentState("LookingNearBlockade"));
         				sendMove(time, currentPath);
         			}
@@ -154,7 +152,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         				currentPath = this.getDijkstraPath(me().getPosition(), currentAction.getId());
         				pathDefined = true;
         				lastPath = currentPath;
-        				currentPath = this.walk(currentPath);
+        				currentPath = this.walk(currentPath, me().getPosition());
         				if(lastPath.size() == currentPath.size())
         				{
         					this.addBeginingQueue(new AgentState("Unblock"));
@@ -164,7 +162,7 @@ public class PoliceForceAgent extends MyAbstractAgent<PoliceForce> {
         			}else if(currentPath.size() >2 && pathDefined == true)
         			{
         				lastPath = currentPath;
-        				currentPath = this.walk(currentPath);
+        				currentPath = this.walk(currentPath, me().getPosition());
         				
         				if(lastPath.size() == currentPath.size())
         				{
