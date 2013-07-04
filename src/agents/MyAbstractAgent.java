@@ -104,6 +104,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     protected Map<Integer, List<Task>> ATS = new HashMap<Integer, List<Task>>();
     
     protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> map;
+    protected ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> mapTmp;
     
     protected Task currentTask = null;
     
@@ -159,7 +160,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
         // assign graph of world model made by SampleSearch to neighbours
         //neighbours = search.getGraph();
         this.map = this.worldGraph();
-        
+        this.mapTmp = this.map;
         useSpeak = config.getValue(Constants.COMMUNICATION_MODEL_KEY).equals(SPEAK_COMMUNICATION_MODEL);
         Logger.debug("Modelo de Comunicação: " + config.getValue(Constants.COMMUNICATION_MODEL_KEY));
         Logger.debug(useSpeak ? "Usando modelo SPEAK" : "Usando modelo SAY");
@@ -185,7 +186,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		
     		EntityID destiny = road.get(index).getID();
     		//path = search.breadthFirstSearch(local, destiny);
-    		path = this.getDijkstraPath(local, destiny);
+    		path = this.getDijkstraPath(local, destiny, this.mapTmp);
     	}else{
     		//path = search.breadthFirstSearch(location().getID(), path.get((path.size() - 1)));
     		/*List<EntityID> tmp = new ArrayList<EntityID>();
@@ -206,7 +207,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		System.out.println("Tamanho do caminho atual "+path.size());
     		path.removeAll(tmp);
     		System.out.println("Tamanho para remoção "+tmp.size());*/
-    		path = this.getDijkstraPath(local, path.get((path.size() - 1)));
+    		path = this.getDijkstraPath(local, path.get((path.size() - 1)), this.mapTmp);
     		
     	}
     	return path;
@@ -405,19 +406,25 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
         }
     }
     
+    public List<EntityID> getDijkstraPath(EntityID position, EntityID destiny)
+    {
+    	return this.getDijkstraPath(position, destiny, this.map);
+    }
+    
     
   //retorna o caminho mais curto (algoritmo de Dijkstra) do local atual do agente ate um destino
-    public List<EntityID> getDijkstraPath(EntityID position, EntityID destiny)
+    public List<EntityID> getDijkstraPath(EntityID position, EntityID destiny,
+    		ListenableUndirectedWeightedGraph<EntityID, DefaultWeightedEdge> mapTarget)
     {
     	List<EntityID> returnedPath = new ArrayList<EntityID>();
     	
     	DijkstraShortestPath<EntityID, DefaultWeightedEdge> shortestPath = 
-    			new DijkstraShortestPath<EntityID, DefaultWeightedEdge>(this.map, position, destiny);
+    			new DijkstraShortestPath<EntityID, DefaultWeightedEdge>(mapTarget, position, destiny);
     	returnedPath.add(shortestPath.getPath().getStartVertex());
     	for(DefaultWeightedEdge e : shortestPath.getPathEdgeList())
     	{
-    		EntityID sourceV = this.map.getEdgeSource(e);
-    		EntityID targetV = this.map.getEdgeTarget(e);
+    		EntityID sourceV = mapTarget.getEdgeSource(e);
+    		EntityID targetV = mapTarget.getEdgeTarget(e);
     		if(returnedPath.contains(sourceV) == false && shortestPath.getPath().getEndVertex() != sourceV)
     		{
     			returnedPath.add(sourceV);
