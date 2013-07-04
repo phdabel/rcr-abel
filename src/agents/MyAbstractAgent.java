@@ -616,11 +616,13 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 			for(Map.Entry<Integer, List<Task>> entry : this.ATS.entrySet())
 			{
 				for(Task t : entry.getValue()){
-					for(Token tk : this.TkS)
-					{
-						if(tk.getTask() == t)
+					if(!this.TkS.isEmpty()){
+						for(Token tk : this.TkS)
 						{
-							this.TkS.remove(tk);
+							if(tk.getTask() == t)
+							{
+								this.TkS.remove(tk);
+							}
 						}
 					}
 				}
