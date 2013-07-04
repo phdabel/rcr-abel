@@ -188,8 +188,9 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     		//path = search.breadthFirstSearch(local, destiny);
     		path = this.getDijkstraPath(local, destiny, this.mapTmp);
     	}else{
+    		
     		//path = search.breadthFirstSearch(location().getID(), path.get((path.size() - 1)));
-    		/*List<EntityID> tmp = new ArrayList<EntityID>();
+    		List<EntityID> tmp = new ArrayList<EntityID>();
     		int ct = 0;
     		for(EntityID p : path)
     		{
@@ -204,10 +205,10 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
     			}
     		}
 
-    		System.out.println("Tamanho do caminho atual "+path.size());
+    		//System.out.println("Tamanho do caminho atual "+path.size());
     		path.removeAll(tmp);
-    		System.out.println("Tamanho para remoção "+tmp.size());*/
-    		path = this.getDijkstraPath(local, path.get((path.size() - 1)), this.mapTmp);
+    		//System.out.println("Tamanho para remoção "+tmp.size()); 
+    		//path = this.getDijkstraPath(local, path.get((path.size() - 1)), this.mapTmp);
     		
     	}
     	return path;
@@ -454,6 +455,31 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 		this.communicationChannel = communicationChannel;
 	}
 	
+	public void printTmpTks(){
+		for(Token t : this.TmpTkS){
+			System.out.println("Tokens Temporarios do agente "+t.getTask().getId());
+		}
+	}
+	
+	public void printTks(){
+		for(Token t : this.TkS){
+			System.out.println("Tokens do agente "+t.getTask().getId());
+		}
+	}
+	
+	/**
+	 * imprime a lista de tarefas conhecidas pelo agente a cada timestep
+	 */
+	public void printKTS()
+	{
+		for(Map.Entry<Integer, List<Task>> entry : this.KTS.entrySet())
+		{
+			for(Task t : entry.getValue()){
+				System.out.println("TimeStep "+entry.getKey()+" tarefa "+t.getId());
+			}
+		}
+	}
+	
 	
 	public Boolean taskInKTS(Task task)
 	{
@@ -510,6 +536,7 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 			//envia mensagem
 			MyMessage msg = new MyMessage(MessageType.ANNOUNCE, task);
 			msg.setSender(me().getID().getValue());
+			
 			sendMessage(timestep, this.getCommunicationChannel(), msg);
 			
 		}
@@ -531,6 +558,8 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 		}
 		if(msg.getType() == MessageType.ANNOUNCE)
 		{
+				
+			
 			if( !this.taskInKTS(msg.getTask()) )
 			{
 				List<Task> tmpTasks;
@@ -582,18 +611,22 @@ public abstract class MyAbstractAgent<E extends StandardEntity> extends Standard
 	protected Task tokenManagement(int timestep)
 	{
 		//remove tasks ja terminadas da lista de tokens
-		for(Map.Entry<Integer, List<Task>> entry : this.ATS.entrySet())
+		if(!ATS.isEmpty())
 		{
-			for(Task t : entry.getValue()){
-				for(Token tk : this.TkS)
-				{
-					if(tk.getTask() == t)
+			for(Map.Entry<Integer, List<Task>> entry : this.ATS.entrySet())
+			{
+				for(Task t : entry.getValue()){
+					for(Token tk : this.TkS)
 					{
-						this.TkS.remove(tk);
+						if(tk.getTask() == t)
+						{
+							this.TkS.remove(tk);
+						}
 					}
 				}
 			}
 		}
+		
 		//tokens que serao realizados
 		List<Token> tokenSet = this.chooseTokenSet(this.TkS);
 		//tokens que serao enviados
